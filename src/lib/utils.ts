@@ -31,3 +31,18 @@ export function wifiBars(rssi: number) {
   if (rssi >= -70) return 2;
   return 1;
 }
+
+export function statusLabel(status: string) {
+  switch (status) {
+    case "online":
+      return "Online";
+    case "offline":
+      return "Offline";
+    case "recording":
+      return "Gravando";
+    case "alert":
+      return "Alerta";
+    default:
+      return status;
+  }
+}

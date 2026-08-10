@@ -9,6 +9,7 @@ export type ArmedMode = "home" | "away" | "disarmed";
 
 interface OrbitState {
   cameras: Camera[];
+  removedCameraIds: string[];
   selectedCameraId: string;
   grid: GridLayout;
   armed: ArmedMode;
@@ -23,12 +24,23 @@ interface OrbitState {
   toggleNight: () => void;
   refreshShare: () => void;
   addCamera: (cam: Camera) => void;
+  removeCamera: (id: string) => void;
+  removeCameras: (ids: string[]) => void;
+}
+
+function buildFleet(removedIds: string[], custom: Camera[]) {
+  const removed = new Set(removedIds);
+  const seedIds = new Set(CAMERAS.map((c) => c.id));
+  const extras = custom.filter((c) => !seedIds.has(c.id) && !removed.has(c.id));
+  const seeds = CAMERAS.filter((c) => !removed.has(c.id));
+  return [...extras, ...seeds];
 }
 
 export const useOrbitStore = create<OrbitState>()(
   persist(
     (set, get) => ({
       cameras: CAMERAS,
+      removedCameraIds: [],
       selectedCameraId: CAMERAS[0].id,
       grid: 4,
       armed: "home",
@@ -48,14 +60,44 @@ export const useOrbitStore = create<OrbitState>()(
         }),
       addCamera: (cam) =>
         set({
-          cameras: [cam, ...get().cameras],
+          cameras: [cam, ...get().cameras.filter((c) => c.id !== cam.id)],
+          removedCameraIds: get().removedCameraIds.filter((id) => id !== cam.id),
           selectedCameraId: cam.id,
         }),
+      removeCamera: (id) => {
+        const cameras = get().cameras.filter((c) => c.id !== id);
+        const removedCameraIds = Array.from(
+          new Set([...get().removedCameraIds, id]),
+        );
+        set({
+          cameras,
+          removedCameraIds,
+          selectedCameraId:
+            get().selectedCameraId === id
+              ? cameras[0]?.id ?? ""
+              : get().selectedCameraId,
+        });
+      },
+      removeCameras: (ids) => {
+        const drop = new Set(ids);
+        const cameras = get().cameras.filter((c) => !drop.has(c.id));
+        const removedCameraIds = Array.from(
+          new Set([...get().removedCameraIds, ...ids]),
+        );
+        set({
+          cameras,
+          removedCameraIds,
+          selectedCameraId: drop.has(get().selectedCameraId)
+            ? cameras[0]?.id ?? ""
+            : get().selectedCameraId,
+        });
+      },
     }),
     {
-      name: "orbit-cameras-v2",
+      name: "orbit-cameras-v3",
       partialize: (s) => ({
         cameras: s.cameras,
+        removedCameraIds: s.removedCameraIds,
         selectedCameraId: s.selectedCameraId,
         grid: s.grid,
         armed: s.armed,
@@ -67,20 +109,20 @@ export const useOrbitStore = create<OrbitState>()(
       merge: (persisted, current) => {
         const p = persisted as Partial<OrbitState> | undefined;
         if (!p) return current;
+        const removedCameraIds = p.removedCameraIds ?? [];
         const seedIds = new Set(CAMERAS.map((c) => c.id));
-        const saved = p.cameras ?? [];
-        const custom = saved.filter((c) => !seedIds.has(c.id));
-        // Mantém seeds atualizados + câmeras cadastradas pelo usuário
-        const cameras = [...custom, ...CAMERAS];
+        const custom = (p.cameras ?? []).filter((c) => !seedIds.has(c.id));
+        const cameras = buildFleet(removedCameraIds, custom);
         return {
           ...current,
           ...p,
+          removedCameraIds,
           cameras,
           selectedCameraId:
             p.selectedCameraId &&
             cameras.some((c) => c.id === p.selectedCameraId)
               ? p.selectedCameraId
-              : cameras[0]?.id ?? current.selectedCameraId,
+              : cameras[0]?.id ?? "",
         };
       },
     },

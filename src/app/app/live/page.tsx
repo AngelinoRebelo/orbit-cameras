@@ -32,6 +32,23 @@ export default function LivePage() {
     cameras.find((c) => c.id === selectedCameraId) ?? cameras[0];
   const visible = cameras.slice(0, grid === 1 ? 1 : grid);
 
+  if (!selected) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-line px-6 py-24 text-center">
+        <h1 className="font-display text-2xl font-bold">Sem câmeras ao vivo</h1>
+        <p className="mt-2 max-w-sm text-sm text-mist-dim">
+          Cadastre ou restaure dispositivos no inventário para abrir o mosaic.
+        </p>
+        <a
+          href="/app/cameras"
+          className="mt-6 rounded-lg bg-signal px-4 py-2.5 text-sm font-semibold text-ink"
+        >
+          Ir para câmeras
+        </a>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">

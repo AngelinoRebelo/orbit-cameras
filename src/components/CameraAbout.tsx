@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Copy, Eye, EyeOff, X } from "lucide-react";
+import { Copy, Eye, EyeOff, Trash2, X } from "lucide-react";
 import {
   deviceQrValue,
   maskSecret,
@@ -13,9 +13,10 @@ import { formatClock } from "@/lib/utils";
 interface CameraAboutProps {
   camera: Camera;
   onClose: () => void;
+  onDelete?: () => void;
 }
 
-export function CameraAbout({ camera, onClose }: CameraAboutProps) {
+export function CameraAbout({ camera, onClose, onDelete }: CameraAboutProps) {
   const [showLogin, setShowLogin] = useState(false);
   const [copied, setCopied] = useState(false);
   const qrValue = useMemo(() => deviceQrValue(camera), [camera]);
@@ -189,6 +190,19 @@ export function CameraAbout({ camera, onClose }: CameraAboutProps) {
               </li>
             ))}
         </ul>
+
+        {onDelete && (
+          <div className="border-t border-line p-4">
+            <button
+              type="button"
+              onClick={onDelete}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-danger/35 bg-danger/10 py-3 text-sm font-medium text-danger transition hover:bg-danger/20"
+            >
+              <Trash2 className="size-4" />
+              Excluir dispositivo
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
