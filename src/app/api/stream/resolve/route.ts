@@ -86,21 +86,19 @@ export async function POST(req: Request) {
     if (preferred && !go2rtcBase()) {
       return NextResponse.json({
         ok: false,
+        tryLan: true,
         error:
-          "Fonte DVRIP/RTSP pronta, mas ORBIT_GO2RTC_URL não está configurada. Defina o gateway ou cole uma URL HLS/MJPEG.",
+          "Sem gateway go2rtc. Se você está na mesma Wi‑Fi da câmera, o Orbit tentará HTTP/MJPEG direto no navegador.",
         source: preferred.replace(/:[^:@/]+@/, ":***@"),
         go2rtcConfigured: false,
-        hint: {
-          env: "ORBIT_GO2RTC_URL=https://seu-go2rtc.exemplo",
-          hlsExample: "https://seu-go2rtc/api/stream.m3u8?src=casa_rua",
-        },
       });
     }
 
     return NextResponse.json({
       ok: false,
+      tryLan: true,
       error:
-        "Sem URL de playback e sem IP/RTSP para montar DVRIP. Edite o dispositivo e informe IP da LAN ou URL HLS.",
+        "Informe o IP local da câmera (mesma Wi‑Fi) para preview HTTP/MJPEG, ou cole uma URL HLS.",
       go2rtcConfigured: Boolean(go2rtcBase()),
     });
   } catch (err) {

@@ -21,6 +21,7 @@ export default function LivePage() {
   const cameras = useOrbitStore((s) => s.cameras);
   const selectedCameraId = useOrbitStore((s) => s.selectedCameraId);
   const setSelected = useOrbitStore((s) => s.setSelected);
+  const updateCamera = useOrbitStore((s) => s.updateCamera);
   const grid = useOrbitStore((s) => s.grid);
   const setGrid = useOrbitStore((s) => s.setGrid);
   const muted = useOrbitStore((s) => s.muted);
@@ -117,6 +118,7 @@ export default function LivePage() {
               nightMode={nightMode}
               muted={muted}
               onClick={() => setSelected(cam.id)}
+              onUpdateCamera={updateCamera}
               className={cn(
                 "w-full rounded-xl",
                 grid === 1 ? "aspect-video min-h-[360px]" : "aspect-video",

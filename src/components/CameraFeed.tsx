@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Battery,
@@ -15,8 +15,10 @@ import {
   Wifi,
 } from "lucide-react";
 import type { Camera } from "@/lib/data";
+import { buildLanCandidateUrls, needsLanIp } from "@/lib/lanStreams";
 import { explainMissingStream } from "@/lib/streaming";
 import type { PlaybackKind } from "@/lib/streaming";
+import { LanMjpegPlayer } from "@/components/LanMjpegPlayer";
 import { StreamPlayer } from "@/components/StreamPlayer";
 import { cn, formatClock, wifiBars } from "@/lib/utils";
 
@@ -30,11 +32,12 @@ interface CameraFeedProps {
   className?: string;
   onClick?: () => void;
   onConfigureStream?: () => void;
+  onUpdateCamera?: (id: string, patch: Partial<Camera>) => void;
 }
 
 interface ActiveStream {
   url: string;
-  kind: PlaybackKind;
+  kind: PlaybackKind | "lan";
   label: string;
 }
 
@@ -48,6 +51,7 @@ export function CameraFeed({
   className,
   onClick,
   onConfigureStream,
+  onUpdateCamera,
 }: CameraFeedProps) {
   const offline = camera.status === "offline";
   const bars = wifiBars(camera.wifiRssi);
@@ -55,23 +59,62 @@ export function CameraFeed({
   const [clock, setClock] = useState("--:--:--");
   const [connecting, setConnecting] = useState(false);
   const [stream, setStream] = useState<ActiveStream | null>(null);
+  const [lanCandidates, setLanCandidates] = useState<string[]>([]);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [draftIp, setDraftIp] = useState(camera.ipAddress ?? "");
+  const [draftPass, setDraftPass] = useState(camera.devicePassword ?? "");
+  const [draftSaving, setDraftSaving] = useState(false);
+
+  const lanUrls = useMemo(
+    () => buildLanCandidateUrls(camera),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      camera.ipAddress,
+      camera.ipPort,
+      camera.deviceLogin,
+      camera.devicePassword,
+      camera.id,
+    ],
+  );
 
   useEffect(() => {
     setMounted(true);
+    setDraftIp(camera.ipAddress ?? "");
+    setDraftPass(camera.devicePassword ?? "");
     const tick = () => setClock(formatClock(new Date()));
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [camera.ipAddress, camera.devicePassword]);
+
+  const startLan = useCallback(
+    (cam: Camera = camera) => {
+      const urls = buildLanCandidateUrls(cam);
+      if (!urls.length) return false;
+      setLanCandidates(urls);
+      setStream({
+        url: urls[0],
+        kind: "lan",
+        label: "LAN HTTP",
+      });
+      setStreamError(null);
+      setPlaying(false);
+      return true;
+    },
+    [camera],
+  );
 
   const connect = useCallback(async () => {
     if (offline) return;
     setConnecting(true);
     setStreamError(null);
     setPlaying(false);
+    setStream(null);
+    setLanCandidates([]);
+
     try {
+      // 1) URL HLS/MJPEG/WebRTC já configurada ou go2rtc no servidor
       const res = await fetch("/api/stream/resolve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -81,40 +124,90 @@ export function CameraFeed({
         ok?: boolean;
         stream?: ActiveStream & { via?: string };
         error?: string;
+        tryLan?: boolean;
       };
-      if (data.ok && data.stream) {
+
+      if (data.ok && data.stream && data.stream.kind !== "lan") {
         setStream({
           url: data.stream.url,
           kind: data.stream.kind,
           label: data.stream.label,
         });
-      } else {
-        setStream(null);
-        setStreamError(data.error || explainMissingStream(camera));
+        return;
       }
+
+      // 2) Fallback: browser na mesma Wi‑Fi fala HTTP com a câmera
+      if (startLan(camera)) return;
+
+      setStreamError(data.error || explainMissingStream(camera));
     } catch {
-      setStream(null);
+      if (startLan(camera)) return;
       setStreamError("Falha de rede ao resolver o stream");
     } finally {
       setConnecting(false);
     }
-  }, [camera, offline]);
+  }, [camera, offline, startLan]);
 
   useEffect(() => {
-    setStream(null);
-    setPlaying(false);
-    setStreamError(null);
     void connect();
   }, [connect]);
 
+  function saveLanAndConnect(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!draftIp.trim()) {
+      setStreamError("Informe o IP da câmera na sua Wi‑Fi.");
+      return;
+    }
+    if (!onUpdateCamera) {
+      // tenta localmente sem persistir
+      const patched = {
+        ...camera,
+        ipAddress: draftIp.trim(),
+        ipPort: 80,
+        devicePassword: draftPass || camera.devicePassword,
+        hasDevicePassword: Boolean(draftPass || camera.devicePassword),
+      };
+      startLan(patched);
+      return;
+    }
+    setDraftSaving(true);
+    const patch: Partial<Camera> = {
+      ipAddress: draftIp.trim(),
+      ipPort: 80,
+      devicePassword: draftPass || camera.devicePassword,
+      hasDevicePassword: Boolean(draftPass || camera.devicePassword),
+      protocol:
+        camera.protocol === "Cloud P2P" ? "XM / ICSee" : camera.protocol,
+    };
+    onUpdateCamera(camera.id, patch);
+    startLan({ ...camera, ...patch });
+    setDraftSaving(false);
+  }
+
+  const showLanForm =
+    !offline &&
+    !playing &&
+    !connecting &&
+    !stream &&
+    (needsLanIp(camera) || Boolean(streamError));
+
   return (
-    <button
-      type="button"
+    <div
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") onClick();
+            }
+          : undefined
+      }
       className={cn(
         "group relative overflow-hidden text-left outline-none transition",
         "focus-visible:ring-2 focus-visible:ring-signal",
         active ? "ring-2 ring-signal" : "ring-1 ring-line",
+        onClick && "cursor-pointer",
         className,
       )}
     >
@@ -133,7 +226,20 @@ export function CameraFeed({
         }}
       />
 
-      {stream && !offline && (
+      {stream && stream.kind === "lan" && lanCandidates.length > 0 && !offline && (
+        <LanMjpegPlayer
+          candidates={lanCandidates.length ? lanCandidates : lanUrls}
+          nightMode={nightMode}
+          onPlaying={() => setPlaying(true)}
+          onError={(msg) => {
+            setPlaying(false);
+            setStream(null);
+            setStreamError(msg);
+          }}
+        />
+      )}
+
+      {stream && stream.kind !== "lan" && !offline && (
         <StreamPlayer
           url={stream.url}
           kind={stream.kind}
@@ -142,17 +248,53 @@ export function CameraFeed({
           onPlaying={() => setPlaying(true)}
           onError={(msg) => {
             setPlaying(false);
-            setStreamError(msg);
+            // fallback LAN se HLS falhar
+            if (!startLan()) setStreamError(msg);
           }}
         />
       )}
 
-      {!stream && !offline && !connecting && (
-        <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-2 bg-black/55 px-4 text-center">
-          <VideoOff className="size-6 text-mist-dim" />
-          <p className="max-w-xs text-[11px] leading-relaxed text-mist-dim">
-            {streamError || explainMissingStream(camera)}
+      {showLanForm && (
+        <div
+          className="absolute inset-0 z-[3] flex flex-col items-center justify-center gap-2 bg-black/70 px-3 text-center"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <VideoOff className="size-5 text-mist-dim" />
+          <p className="max-w-[280px] text-[11px] leading-relaxed text-mist-dim">
+            Cloud P2P do iCSee/XMeye não toca sozinho no Chrome. Na mesma Wi‑Fi,
+            informe o <span className="text-mist">IP local</span> da câmera para
+            abrir o vídeo HTTP/MJPEG.
           </p>
+          <div className="flex w-full max-w-[280px] flex-col gap-1.5">
+            <input
+              value={draftIp}
+              onChange={(e) => setDraftIp(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              placeholder="IP LAN ex.: 192.168.0.20"
+              className="rounded-md border border-line bg-ink px-2 py-1.5 font-mono text-xs text-mist outline-none focus:border-signal/50"
+            />
+            <input
+              type="password"
+              value={draftPass}
+              onChange={(e) => setDraftPass(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              placeholder="Senha do dispositivo"
+              className="rounded-md border border-line bg-ink px-2 py-1.5 text-xs text-mist outline-none focus:border-signal/50"
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              disabled={draftSaving}
+              onClick={saveLanAndConnect}
+              className="rounded-md bg-signal px-2 py-1.5 text-xs font-semibold text-ink"
+            >
+              {draftSaving ? "Salvando…" : "Conectar vídeo na LAN"}
+            </button>
+          </div>
+          {streamError && (
+            <p className="max-w-[280px] text-[10px] text-amber">{streamError}</p>
+          )}
           <div className="flex flex-wrap justify-center gap-2">
             <span
               role="button"
@@ -161,13 +303,7 @@ export function CameraFeed({
                 e.stopPropagation();
                 void connect();
               }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.stopPropagation();
-                  void connect();
-                }
-              }}
-              className="rounded-md bg-signal/20 px-2.5 py-1 text-[11px] font-medium text-signal"
+              className="rounded-md bg-white/10 px-2 py-1 text-[11px] text-mist"
             >
               Tentar de novo
             </span>
@@ -179,15 +315,9 @@ export function CameraFeed({
                   e.stopPropagation();
                   onConfigureStream();
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.stopPropagation();
-                    onConfigureStream();
-                  }
-                }}
-                className="rounded-md border border-line px-2.5 py-1 text-[11px] text-mist"
+                className="rounded-md border border-line px-2 py-1 text-[11px] text-mist"
               >
-                Configurar stream
+                Mais opções
               </span>
             )}
           </div>
@@ -197,11 +327,9 @@ export function CameraFeed({
       {connecting && (
         <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-2 bg-black/50 text-xs text-mist">
           <Loader2 className="size-5 animate-spin text-signal" />
-          Resolvendo DVRIP / RTSP / HLS…
+          Conectando stream…
         </div>
       )}
-
-      {!offline && !stream && <div className="absolute inset-0 scanline opacity-40" />}
 
       <div className="pointer-events-none absolute inset-0 opacity-[0.08] mix-blend-overlay">
         <div className="h-full w-full lens-grid" />
@@ -238,7 +366,7 @@ export function CameraFeed({
                 <Video className="size-3" /> REC
               </span>
             )}
-            {stream && (
+            {stream && playing && (
               <span className="rounded bg-black/45 px-2 py-1 text-[10px] uppercase tracking-wider text-signal backdrop-blur-sm">
                 {stream.label}
               </span>
@@ -275,7 +403,9 @@ export function CameraFeed({
               </div>
               {!compact && (
                 <div className="shrink-0 text-right font-mono text-[10px] text-mist-dim">
-                  <div suppressHydrationWarning>{mounted ? clock : "--:--:--"}</div>
+                  <div suppressHydrationWarning>
+                    {mounted ? clock : "--:--:--"}
+                  </div>
                   <div className="mt-0.5 flex items-center justify-end gap-2">
                     <span className="inline-flex items-center gap-1">
                       <Wifi className="size-3" />
@@ -311,6 +441,6 @@ export function CameraFeed({
           </p>
         </div>
       )}
-    </button>
+    </div>
   );
 }

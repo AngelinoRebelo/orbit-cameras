@@ -211,6 +211,7 @@ export default function CamerasPage() {
                   : () => setDetail(cam)
               }
               onConfigureStream={() => setDetail(cam)}
+              onUpdateCamera={updateCamera}
             />
                   {selectMode && (
                     <button
