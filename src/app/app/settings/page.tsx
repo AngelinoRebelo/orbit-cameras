@@ -71,20 +71,22 @@ export default function SettingsPage() {
 
       <section className="rounded-2xl border border-line bg-ink-2/45 p-5">
         <h2 className="font-display text-lg font-semibold">
-          Cloud VMS (Serial + senha · remoto)
+          Bridge NetSDK (igual ao VMS)
         </h2>
         <p className="mt-1 text-sm text-mist-dim">
-          Como no VMS Windows: N.º de série + usuário + senha do dispositivo,
-          fora da LAN. O Chrome não fala P2P XMeye — use um bridge NetSDK que
-          devolva HLS:
+          Rode o bridge na pasta <span className="font-mono text-mist">bridge/</span>{" "}
+          do repositório (Windows + NetSdk.dll + ffmpeg). Ele faz{" "}
+          <span className="text-mist">Login_Cloud</span> por Serial e publica HLS.
         </p>
+        <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-mist-dim">
+          <li>Copie NetSdk.dll e StreamReader.dll para bridge/vendor/</li>
+          <li>No PC: execute bridge/run.bat (ou run.sh no Linux)</li>
+          <li>Publique com Tailscale/ngrok e defina no Railway:</li>
+        </ol>
         <div className="mt-4 space-y-2 rounded-xl border border-line bg-ink/50 p-3 font-mono text-xs text-mist-dim">
-          <p>ORBIT_CLOUD_GATEWAY=https://seu-bridge.exemplo</p>
+          <p>ORBIT_CLOUD_GATEWAY=https://seu-tunel.exemplo</p>
           <p className="text-[11px] text-mist/80">
-            # POST /connect {"{"} serialNumber, username, password {"}"}
-          </p>
-          <p className="text-[11px] text-mist/80">
-            # → {"{"} playbackUrl: &quot;https://…/live.m3u8&quot;, kind: &quot;hls&quot; {"}"}
+            # no bridge: ORBIT_BRIDGE_PUBLIC_URL=https://seu-tunel.exemplo
           </p>
         </div>
         <p className="mt-3 text-sm">

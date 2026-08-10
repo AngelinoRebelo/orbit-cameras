@@ -1,0 +1,15 @@
+# Bridge NetSDK — use em máquina Windows/Linux COM as libs do SDK em ./vendor
+# Exponha com Tailscale/ngrok e aponte ORBIT_CLOUD_GATEWAY no Railway.
+services:
+  netsdk-bridge:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      ORBIT_BRIDGE_PORT: "8787"
+      ORBIT_BRIDGE_PUBLIC_URL: ${ORBIT_BRIDGE_PUBLIC_URL:-http://127.0.0.1:8787}
+      ORBIT_BRIDGE_REENCODE: ${ORBIT_BRIDGE_REENCODE:-0}
+    volumes:
+      - ./vendor:/app/vendor:ro
+      - ./data:/app/data
+    restart: unless-stopped

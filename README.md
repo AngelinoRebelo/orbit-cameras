@@ -32,6 +32,7 @@ Variáveis futuras para gateway real:
 
 ```
 ORBIT_GO2RTC_URL=https://seu-go2rtc
+ORBIT_CLOUD_GATEWAY=https://seu-bridge-netsdk
 ORBIT_WEBRTC_GATEWAY=
 ORBIT_ONVIF_DISCOVERY=true
 ORBIT_STORAGE_BUCKET=
@@ -44,6 +45,15 @@ O browser **não** reproduz Cloud P2P nem RTSP direto. Fluxo suportado:
 1. Informe o **IP LAN** + senha do dispositivo em **Detalhes → Stream**
 2. Rode [go2rtc](https://github.com/AlexxIT/go2rtc) na rede das câmeras com fonte `dvrip://user:pass@IP:34567`
 3. Defina `ORBIT_GO2RTC_URL` no Railway **ou** cole a URL HLS (`…/api/stream.m3u8?src=…`) no dispositivo
+
+## Bridge NetSDK (cloud por Serial — igual VMS)
+
+Para ver XMeye/ICSee **fora da LAN** no browser:
+
+1. Em `bridge/`: copie `NetSdk.dll` + `StreamReader.dll` para `vendor/`
+2. Rode `bridge/run.bat` (Windows) com ffmpeg no PATH
+3. Publique o bridge (Tailscale/ngrok) e defina no Railway `ORBIT_CLOUD_GATEWAY`
+4. Detalhes: [bridge/README.md](bridge/README.md)
 
 O player Orbit toca **HLS**, **MJPEG** e **WebRTC/WHEP**.
 
