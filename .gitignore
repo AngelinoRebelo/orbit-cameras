@@ -43,3 +43,7 @@ next-env.d.ts
 bridge/.venv/
 bridge/data/hls/
 
+
+**/__pycache__/
+*.pyc
+
