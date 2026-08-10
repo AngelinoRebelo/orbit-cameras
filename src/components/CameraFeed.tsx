@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Battery,
+  Cloud,
   Loader2,
   Mic,
   MicOff,
@@ -15,6 +16,11 @@ import {
   Wifi,
 } from "lucide-react";
 import type { Camera } from "@/lib/data";
+import {
+  cloudLoginPatch,
+  isCloudCamera,
+  type CloudConnectResult,
+} from "@/lib/cloud";
 import { buildLanCandidateUrls, needsLanIp } from "@/lib/lanStreams";
 import { explainMissingStream } from "@/lib/streaming";
 import type { PlaybackKind } from "@/lib/streaming";
@@ -29,6 +35,8 @@ interface CameraFeedProps {
   nightMode?: boolean;
   muted?: boolean;
   showHud?: boolean;
+  /** Prioriza login cloud (Serial+senha) como no VMS Windows */
+  preferCloud?: boolean;
   className?: string;
   onClick?: () => void;
   onConfigureStream?: () => void;
@@ -48,12 +56,14 @@ export function CameraFeed({
   nightMode,
   muted = true,
   showHud = true,
+  preferCloud = false,
   className,
   onClick,
   onConfigureStream,
   onUpdateCamera,
 }: CameraFeedProps) {
   const offline = camera.status === "offline";
+  const cloud = isCloudCamera(camera);
   const bars = wifiBars(camera.wifiRssi);
   const [mounted, setMounted] = useState(false);
   const [clock, setClock] = useState("--:--:--");
@@ -62,8 +72,11 @@ export function CameraFeed({
   const [lanCandidates, setLanCandidates] = useState<string[]>([]);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [draftIp, setDraftIp] = useState(camera.ipAddress ?? "");
+  const [showLanAlt, setShowLanAlt] = useState(false);
+  const [draftSerial, setDraftSerial] = useState(camera.serialNumber ?? "");
+  const [draftUser, setDraftUser] = useState(camera.deviceLogin || "admin");
   const [draftPass, setDraftPass] = useState(camera.devicePassword ?? "");
+  const [draftIp, setDraftIp] = useState(camera.ipAddress ?? "");
   const [draftSaving, setDraftSaving] = useState(false);
 
   const lanUrls = useMemo(
@@ -80,13 +93,20 @@ export function CameraFeed({
 
   useEffect(() => {
     setMounted(true);
-    setDraftIp(camera.ipAddress ?? "");
+    setDraftSerial(camera.serialNumber ?? "");
+    setDraftUser(camera.deviceLogin || "admin");
     setDraftPass(camera.devicePassword ?? "");
+    setDraftIp(camera.ipAddress ?? "");
     const tick = () => setClock(formatClock(new Date()));
     tick();
     const id = window.setInterval(tick, 1000);
     return () => window.clearInterval(id);
-  }, [camera.ipAddress, camera.devicePassword]);
+  }, [
+    camera.ipAddress,
+    camera.devicePassword,
+    camera.serialNumber,
+    camera.deviceLogin,
+  ]);
 
   const startLan = useCallback(
     (cam: Camera = camera) => {
@@ -114,7 +134,6 @@ export function CameraFeed({
     setLanCandidates([]);
 
     try {
-      // 1) URL HLS/MJPEG/WebRTC já configurada ou go2rtc no servidor
       const res = await fetch("/api/stream/resolve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -125,6 +144,7 @@ export function CameraFeed({
         stream?: ActiveStream & { via?: string };
         error?: string;
         tryLan?: boolean;
+        tryCloud?: boolean;
       };
 
       if (data.ok && data.stream && data.stream.kind !== "lan") {
@@ -136,38 +156,96 @@ export function CameraFeed({
         return;
       }
 
-      // 2) Fallback: browser na mesma Wi‑Fi fala HTTP com a câmera
-      if (startLan(camera)) return;
+      // LAN só como fallback (mesma Wi‑Fi)
+      if (!preferCloud && startLan(camera)) return;
+      if (camera.ipAddress && startLan(camera)) return;
 
       setStreamError(data.error || explainMissingStream(camera));
     } catch {
-      if (startLan(camera)) return;
+      if (camera.ipAddress && startLan(camera)) return;
       setStreamError("Falha de rede ao resolver o stream");
     } finally {
       setConnecting(false);
     }
-  }, [camera, offline, startLan]);
+  }, [camera, offline, preferCloud, startLan]);
 
   useEffect(() => {
     void connect();
   }, [connect]);
 
+  async function saveCloudAndConnect(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!draftSerial.trim() || !draftPass) {
+      setStreamError("Informe Serial NO e senha do dispositivo.");
+      return;
+    }
+    setDraftSaving(true);
+    setStreamError(null);
+    const patch = cloudLoginPatch({
+      serialNumber: draftSerial,
+      username: draftUser,
+      password: draftPass,
+      platform: camera.cloudPlatform,
+    });
+    const next = { ...camera, ...patch };
+    onUpdateCamera?.(camera.id, patch);
+
+    try {
+      const res = await fetch("/api/cloud/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serialNumber: draftSerial,
+          username: draftUser,
+          password: draftPass,
+          cameraId: camera.id,
+          platform: camera.cloudPlatform ?? "XMeye",
+        }),
+      });
+      const data = (await res.json()) as CloudConnectResult;
+      if (data.ok && data.playbackUrl) {
+        const withPlay: Partial<Camera> = {
+          ...patch,
+          playbackUrl: data.playbackUrl,
+          playbackType: data.playbackKind ?? "auto",
+          status: "online",
+        };
+        onUpdateCamera?.(camera.id, withPlay);
+        setStream({
+          url: data.playbackUrl,
+          kind: data.playbackKind ?? "hls",
+          label: data.label || "Cloud",
+        });
+        setPlaying(false);
+        setStreamError(null);
+      } else {
+        setStreamError(data.message || explainMissingStream(next));
+        // re-resolve in case gateway/session already saved URL elsewhere
+        const resolve = await fetch("/api/stream/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ camera: { ...next, ...patch } }),
+        });
+        const resolved = (await resolve.json()) as {
+          ok?: boolean;
+          stream?: ActiveStream;
+        };
+        if (resolved.ok && resolved.stream) {
+          setStream(resolved.stream);
+          setStreamError(null);
+        }
+      }
+    } catch {
+      setStreamError("Falha ao conectar na nuvem.");
+    } finally {
+      setDraftSaving(false);
+    }
+  }
+
   function saveLanAndConnect(e: React.MouseEvent) {
     e.stopPropagation();
     if (!draftIp.trim()) {
       setStreamError("Informe o IP da câmera na sua Wi‑Fi.");
-      return;
-    }
-    if (!onUpdateCamera) {
-      // tenta localmente sem persistir
-      const patched = {
-        ...camera,
-        ipAddress: draftIp.trim(),
-        ipPort: 80,
-        devicePassword: draftPass || camera.devicePassword,
-        hasDevicePassword: Boolean(draftPass || camera.devicePassword),
-      };
-      startLan(patched);
       return;
     }
     setDraftSaving(true);
@@ -176,20 +254,25 @@ export function CameraFeed({
       ipPort: 80,
       devicePassword: draftPass || camera.devicePassword,
       hasDevicePassword: Boolean(draftPass || camera.devicePassword),
-      protocol:
-        camera.protocol === "Cloud P2P" ? "XM / ICSee" : camera.protocol,
     };
-    onUpdateCamera(camera.id, patch);
+    onUpdateCamera?.(camera.id, patch);
     startLan({ ...camera, ...patch });
     setDraftSaving(false);
   }
 
-  const showLanForm =
+  const needsSetup =
     !offline &&
     !playing &&
     !connecting &&
     !stream &&
-    (needsLanIp(camera) || Boolean(streamError));
+    (Boolean(streamError) ||
+      needsLanIp(camera) ||
+      (cloud && !camera.playbackUrl));
+
+  const showCloudForm =
+    needsSetup && (preferCloud || cloud) && !showLanAlt;
+
+  const showLanForm = needsSetup && (!showCloudForm || showLanAlt);
 
   return (
     <div
@@ -248,10 +331,87 @@ export function CameraFeed({
           onPlaying={() => setPlaying(true)}
           onError={(msg) => {
             setPlaying(false);
-            // fallback LAN se HLS falhar
-            if (!startLan()) setStreamError(msg);
+            if (camera.ipAddress && startLan()) return;
+            setStreamError(msg);
           }}
         />
+      )}
+
+      {showCloudForm && (
+        <div
+          className="absolute inset-0 z-[3] flex flex-col items-center justify-center gap-2 bg-black/75 px-3 text-center"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <Cloud className="size-5 text-signal" />
+          <p className="max-w-[300px] text-[11px] leading-relaxed text-mist-dim">
+            Conexão <span className="text-mist">cloud</span> (como no VMS
+            Windows): Serial NO + usuário + senha do dispositivo — sem precisar
+            da mesma Wi‑Fi.
+          </p>
+          <div className="flex w-full max-w-[300px] flex-col gap-1.5">
+            <input
+              value={draftSerial}
+              onChange={(e) => setDraftSerial(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              placeholder="Serial NO / Cloud ID"
+              className="rounded-md border border-line bg-ink px-2 py-1.5 font-mono text-xs text-mist outline-none focus:border-signal/50"
+              autoComplete="off"
+            />
+            <input
+              value={draftUser}
+              onChange={(e) => setDraftUser(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              placeholder="Usuário (admin)"
+              className="rounded-md border border-line bg-ink px-2 py-1.5 text-xs text-mist outline-none focus:border-signal/50"
+              autoComplete="username"
+            />
+            <input
+              type="password"
+              value={draftPass}
+              onChange={(e) => setDraftPass(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              placeholder="Senha do dispositivo"
+              className="rounded-md border border-line bg-ink px-2 py-1.5 text-xs text-mist outline-none focus:border-signal/50"
+              autoComplete="current-password"
+            />
+            <button
+              type="button"
+              disabled={draftSaving}
+              onClick={(e) => void saveCloudAndConnect(e)}
+              className="rounded-md bg-signal px-2 py-1.5 text-xs font-semibold text-ink"
+            >
+              {draftSaving ? "Conectando…" : "Conectar na nuvem"}
+            </button>
+          </div>
+          {streamError && (
+            <p className="max-w-[300px] text-[10px] text-amber">{streamError}</p>
+          )}
+          <div className="flex flex-wrap justify-center gap-2">
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowLanAlt(true);
+              }}
+              className="rounded-md border border-line px-2 py-1 text-[11px] text-mist"
+            >
+              Estou na mesma Wi‑Fi (IP)
+            </span>
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                void connect();
+              }}
+              className="rounded-md bg-white/10 px-2 py-1 text-[11px] text-mist"
+            >
+              Tentar de novo
+            </span>
+          </div>
+        </div>
       )}
 
       {showLanForm && (
@@ -262,9 +422,8 @@ export function CameraFeed({
         >
           <VideoOff className="size-5 text-mist-dim" />
           <p className="max-w-[280px] text-[11px] leading-relaxed text-mist-dim">
-            Cloud P2P do iCSee/XMeye não toca sozinho no Chrome. Na mesma Wi‑Fi,
-            informe o <span className="text-mist">IP local</span> da câmera para
-            abrir o vídeo HTTP/MJPEG.
+            Preview pela <span className="text-mist">mesma Wi‑Fi</span>: informe
+            o IP local da câmera.
           </p>
           <div className="flex w-full max-w-[280px] flex-col gap-1.5">
             <input
@@ -296,6 +455,19 @@ export function CameraFeed({
             <p className="max-w-[280px] text-[10px] text-amber">{streamError}</p>
           )}
           <div className="flex flex-wrap justify-center gap-2">
+            {(preferCloud || cloud) && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowLanAlt(false);
+                }}
+                className="rounded-md border border-line px-2 py-1 text-[11px] text-mist"
+              >
+                Voltar ao login cloud
+              </span>
+            )}
             <span
               role="button"
               tabIndex={0}
@@ -398,7 +570,10 @@ export function CameraFeed({
                   {camera.name}
                 </p>
                 <p className="truncate text-xs text-mist-dim">
-                  {camera.location} · {camera.protocol} · {camera.resolution}
+                  {camera.serialNumber
+                    ? `SN ${camera.serialNumber}`
+                    : `${camera.location} · ${camera.protocol}`}{" "}
+                  · {camera.resolution}
                 </p>
               </div>
               {!compact && (

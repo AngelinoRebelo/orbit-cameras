@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { cloudGatewayBase, isCloudCamera } from "@/lib/cloud";
 import {
   buildDvripSource,
   buildRtspSource,
   detectPlaybackKind,
+  resolveCloudGateway,
   resolveDirectPlayback,
   type ResolvedStream,
 } from "@/lib/streaming";
@@ -24,9 +26,7 @@ async function registerGo2rtc(
   const putUrl = `${base}/api/streams?name=${encodeURIComponent(name)}&src=${encodeURIComponent(src)}`;
   try {
     const res = await fetch(putUrl, { method: "PUT" });
-    // go2rtc returns 200 even when updating; 400 if bad
     if (!res.ok && res.status !== 400) {
-      // try continue anyway — stream may already exist
       const text = await res.text().catch(() => "");
       if (res.status >= 500) {
         throw new Error(text || `go2rtc HTTP ${res.status}`);
@@ -63,7 +63,39 @@ export async function POST(req: Request) {
         ok: true,
         stream: direct,
         go2rtcConfigured: Boolean(go2rtcBase()),
+        cloudGatewayConfigured: Boolean(cloudGatewayBase()),
       });
+    }
+
+    // Cloud VMS: serial + senha → bridge NetSDK (remoto, fora da LAN)
+    if (
+      isCloudCamera(camera) &&
+      camera.serialNumber &&
+      camera.devicePassword &&
+      cloudGatewayBase()
+    ) {
+      try {
+        const cloud = await resolveCloudGateway(camera);
+        if (cloud) {
+          return NextResponse.json({
+            ok: true,
+            stream: cloud,
+            go2rtcConfigured: Boolean(go2rtcBase()),
+            cloudGatewayConfigured: true,
+          });
+        }
+      } catch (err) {
+        return NextResponse.json({
+          ok: false,
+          tryCloud: true,
+          error:
+            err instanceof Error
+              ? err.message
+              : "Falha no gateway cloud (VMS)",
+          go2rtcConfigured: Boolean(go2rtcBase()),
+          cloudGatewayConfigured: true,
+        });
+      }
     }
 
     const dvrip = buildDvripSource(camera);
@@ -80,6 +112,19 @@ export async function POST(req: Request) {
         stream,
         source: preferred.replace(/:[^:@/]+@/, ":***@"),
         go2rtcConfigured: true,
+        cloudGatewayConfigured: Boolean(cloudGatewayBase()),
+      });
+    }
+
+    if (isCloudCamera(camera) && camera.serialNumber) {
+      return NextResponse.json({
+        ok: false,
+        tryCloud: true,
+        error: camera.devicePassword
+          ? "Sem ORBIT_CLOUD_GATEWAY — o P2P cloud (como no VMS Windows) precisa do bridge NetSDK→HLS para tocar no browser."
+          : "Informe a senha do dispositivo para conectar na nuvem (Serial + login + senha).",
+        go2rtcConfigured: Boolean(go2rtcBase()),
+        cloudGatewayConfigured: Boolean(cloudGatewayBase()),
       });
     }
 
@@ -91,15 +136,18 @@ export async function POST(req: Request) {
           "Sem gateway go2rtc. Se você está na mesma Wi‑Fi da câmera, o Orbit tentará HTTP/MJPEG direto no navegador.",
         source: preferred.replace(/:[^:@/]+@/, ":***@"),
         go2rtcConfigured: false,
+        cloudGatewayConfigured: Boolean(cloudGatewayBase()),
       });
     }
 
     return NextResponse.json({
       ok: false,
       tryLan: true,
+      tryCloud: isCloudCamera(camera),
       error:
-        "Informe o IP local da câmera (mesma Wi‑Fi) para preview HTTP/MJPEG, ou cole uma URL HLS.",
+        "Use login cloud (Serial + senha) fora da LAN, ou informe IP local na mesma Wi‑Fi.",
       go2rtcConfigured: Boolean(go2rtcBase()),
+      cloudGatewayConfigured: Boolean(cloudGatewayBase()),
     });
   } catch (err) {
     return NextResponse.json(
@@ -114,14 +162,18 @@ export async function POST(req: Request) {
 
 export async function GET() {
   const base = go2rtcBase();
+  const cloud = cloudGatewayBase();
   return NextResponse.json({
     go2rtcConfigured: Boolean(base),
     go2rtcUrl: base ? "[configurado]" : null,
+    cloudGatewayConfigured: Boolean(cloud),
+    cloudGatewayUrl: cloud ? "[configurado]" : null,
     protocols: [
+      "Cloud P2P (Serial + user + senha) — via ORBIT_CLOUD_GATEWAY (padrão VMS)",
       "HLS (.m3u8) — nativo no player",
       "MJPEG — img stream",
       "WebRTC/WHEP — via go2rtc",
-      "DVRIP :34567 (XMeye/ICSee) — via go2rtc",
+      "DVRIP :34567 (XMeye/ICSee) — via go2rtc na LAN",
       "RTSP — via go2rtc → HLS/WebRTC",
     ],
     detectSample: detectPlaybackKind("https://example.com/live.m3u8"),

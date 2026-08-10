@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useState } from "react";
 import {
   Maximize2,
   Mic,
@@ -12,8 +13,11 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { CameraFeed } from "@/components/CameraFeed";
+import { VmsCloudPanel } from "@/components/VmsCloudPanel";
+import type { CloudConnectResult } from "@/lib/cloud";
+import { isCloudCamera } from "@/lib/cloud";
 import { useOrbitStore, type GridLayout } from "@/lib/store";
-import { cn } from "@/lib/utils";
+import { cn, statusLabel } from "@/lib/utils";
 
 const GRIDS: GridLayout[] = [1, 4, 9, 16];
 
@@ -28,17 +32,26 @@ export default function LivePage() {
   const toggleMute = useOrbitStore((s) => s.toggleMute);
   const nightMode = useOrbitStore((s) => s.nightMode);
   const toggleNight = useOrbitStore((s) => s.toggleNight);
+  const [feedKey, setFeedKey] = useState(0);
 
   const selected =
     cameras.find((c) => c.id === selectedCameraId) ?? cameras[0];
   const visible = cameras.slice(0, grid === 1 ? 1 : grid);
+  const cloudDevices = cameras.filter(isCloudCamera);
+
+  const onCloudConnected = useCallback(
+    (_id: string, result: CloudConnectResult) => {
+      if (result.ok) setFeedKey((k) => k + 1);
+    },
+    [],
+  );
 
   if (!selected) {
     return (
       <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-line px-6 py-24 text-center">
         <h1 className="font-display text-2xl font-bold">Sem câmeras ao vivo</h1>
         <p className="mt-2 max-w-sm text-sm text-mist-dim">
-          Cadastre ou restaure dispositivos no inventário para abrir o mosaic.
+          Cadastre um dispositivo com N.º de série e senha (modo VMS / Cloud).
         </p>
         <a
           href="/app/cameras"
@@ -51,12 +64,12 @@ export default function LivePage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl font-bold">Ao vivo</h1>
+          <h1 className="font-display text-3xl font-bold">Ao vivo · VMS</h1>
           <p className="text-sm text-mist-dim">
-            Mosaic WebRTC · PTZ · áudio bidirecional
+            Conexão cloud por Serial NO + login/senha do dispositivo
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -100,7 +113,71 @@ export default function LivePage() {
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_280px]">
+      <div className="grid gap-4 xl:grid-cols-[240px_1fr_300px]">
+        {/* Lista de dispositivos — padrão VMS */}
+        <aside className="rounded-2xl border border-line bg-ink-2/50 p-3">
+          <h2 className="px-1 font-display text-sm font-semibold">
+            Dispositivos
+          </h2>
+          <p className="mb-2 px-1 text-[11px] text-mist-dim">
+            {cloudDevices.length} cloud · {cameras.length} total
+          </p>
+          <ul className="max-h-[70vh] space-y-1 overflow-y-auto">
+            {cameras.map((cam) => {
+              const active = cam.id === selected.id;
+              const cloud = isCloudCamera(cam);
+              return (
+                <li key={cam.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(cam.id)}
+                    onDoubleClick={() => {
+                      setSelected(cam.id);
+                      setGrid(1);
+                      setFeedKey((k) => k + 1);
+                    }}
+                    className={cn(
+                      "w-full rounded-xl border px-3 py-2.5 text-left transition",
+                      active
+                        ? "border-signal/40 bg-signal/10"
+                        : "border-transparent hover:border-line hover:bg-white/5",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-medium">
+                        {cam.name}
+                      </span>
+                      <span
+                        className={cn(
+                          "size-1.5 shrink-0 rounded-full",
+                          cam.status === "offline"
+                            ? "bg-mist-dim"
+                            : cam.status === "alert"
+                              ? "bg-danger"
+                              : "bg-signal",
+                        )}
+                      />
+                    </div>
+                    <p className="mt-0.5 truncate font-mono text-[10px] text-mist-dim">
+                      {cam.serialNumber
+                        ? `SN ${cam.serialNumber}`
+                        : cam.ipAddress
+                          ? cam.ipAddress
+                          : statusLabel(cam.status)}
+                    </p>
+                    {cloud && (
+                      <p className="mt-0.5 text-[10px] uppercase tracking-wider text-signal/80">
+                        Cloud P2P
+                      </p>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </aside>
+
+        {/* Preview */}
         <div
           className={cn(
             "grid gap-2",
@@ -112,11 +189,12 @@ export default function LivePage() {
         >
           {(grid === 1 ? [selected] : visible).map((cam) => (
             <CameraFeed
-              key={cam.id}
+              key={`${cam.id}-${feedKey}`}
               camera={cam}
               active={cam.id === selected.id}
               nightMode={nightMode}
               muted={muted}
+              preferCloud
               onClick={() => setSelected(cam.id)}
               onUpdateCamera={updateCamera}
               className={cn(
@@ -127,7 +205,14 @@ export default function LivePage() {
           ))}
         </div>
 
+        {/* Painel direito: login cloud + PTZ */}
         <aside className="space-y-4">
+          <VmsCloudPanel
+            camera={selected}
+            onUpdateCamera={updateCamera}
+            onConnected={onCloudConnected}
+          />
+
           <div className="rounded-2xl border border-line bg-ink-2/50 p-4">
             <h2 className="font-display text-sm font-semibold">
               Controles PTZ
@@ -197,6 +282,12 @@ export default function LivePage() {
                 <dd>{selected.protocol}</dd>
               </div>
               <div className="flex justify-between gap-2">
+                <dt className="text-mist-dim">Serial</dt>
+                <dd className="truncate font-mono">
+                  {selected.serialNumber || "—"}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-2">
                 <dt className="text-mist-dim">Codec</dt>
                 <dd>{selected.codec}</dd>
               </div>
@@ -205,10 +296,6 @@ export default function LivePage() {
                 <dd>
                   {selected.fps} · {selected.resolution}
                 </dd>
-              </div>
-              <div className="flex justify-between gap-2">
-                <dt className="text-mist-dim">Latência</dt>
-                <dd className="text-signal">{selected.streamLatencyMs} ms</dd>
               </div>
               <div className="flex justify-between gap-2">
                 <dt className="text-mist-dim">Áudio</dt>
