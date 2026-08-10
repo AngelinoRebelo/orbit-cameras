@@ -581,24 +581,77 @@ export function maskSecret(value: string, visible = 4) {
   return `${value.slice(0, visible)}${"*".repeat(4)}${value.slice(-visible)}`;
 }
 
+const XM_PLATFORM_TOKENS = new Set([
+  "csee",
+  "icsee",
+  "xmeye",
+  "xm",
+  "share",
+  "device",
+  "cam",
+  "camera",
+]);
+
+/** Extrai N.º de série / Cloud ID / shareKey a partir do conteúdo do QR. */
 export function parseQrPayload(raw: string) {
   const text = raw.trim();
-  // Formatos comuns: serial puro, sn=..., ou URL com id
-  const snMatch = text.match(/(?:sn|serial|id)[=:]?\s*([a-z0-9]{12,24})/i);
-  if (snMatch) return snMatch[1];
-  const bare = text.match(/^([a-z0-9]{12,24})$/i);
+  if (!text) return "";
+
+  // sn= / serial= / id= / shareKey= / uuid= no texto livre
+  const keyed = text.match(
+    /(?:share[_-]?key|sn|serial|device(?:id)?|uuid|uid|did)[=:]\s*([a-z0-9_\-]{8,64})/i,
+  );
+  if (keyed?.[1]) return keyed[1];
+
+  // Serial XM puro (ex.: f9b1765cf546a7b15nr0)
+  const bare = text.match(/^([a-z0-9]{12,32})$/i);
   if (bare) return bare[1];
+
   try {
     const url = new URL(text);
-    return (
-      url.searchParams.get("sn") ||
-      url.searchParams.get("id") ||
-      url.pathname.split("/").filter(Boolean).pop() ||
-      text
-    );
+    const params = [
+      "shareKey",
+      "sharekey",
+      "share_key",
+      "sn",
+      "serial",
+      "deviceId",
+      "deviceid",
+      "uuid",
+      "id",
+      "uid",
+      "did",
+    ];
+    for (const key of params) {
+      const value = url.searchParams.get(key);
+      if (value && value.length >= 8) return value.trim();
+    }
+
+    // Path segments: ignore nomes de app (CSee, XMeye…)
+    const parts = url.pathname.split("/").filter(Boolean);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = decodeURIComponent(parts[i]);
+      if (part.length >= 8 && !XM_PLATFORM_TOKENS.has(part.toLowerCase())) {
+        return part;
+      }
+    }
+
+    // Hash #sn=...
+    if (url.hash) {
+      const hashMatch = url.hash.match(
+        /(?:share[_-]?key|sn|serial|id)[=:]([a-z0-9_\-]{8,64})/i,
+      );
+      if (hashMatch?.[1]) return hashMatch[1];
+    }
   } catch {
-    return text;
+    // não é URL
   }
+
+  // Último recurso: token longo no meio do texto
+  const loose = text.match(/\b([a-z0-9]{16,32})\b/i);
+  if (loose) return loose[1];
+
+  return text;
 }
 
 export function deviceQrValue(camera: Camera) {

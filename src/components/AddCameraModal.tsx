@@ -98,17 +98,43 @@ export function AddCameraModal({ onClose, onAdd }: AddCameraModalProps) {
     setQrPreview(url);
     try {
       const raw = await decodeQrFromImageFile(file);
-      const sn = parseQrPayload(raw);
-      set("qrPayload", raw);
-      set("serialNumber", sn);
-      if (!form.name.trim()) set("name", `Cam ${sn.slice(-4)}`);
-      setQrStatus(`QR lido com sucesso · ${sn}`);
+      applyQrContent(raw);
     } catch (err) {
       setQrStatus("");
       setError(err instanceof Error ? err.message : "Falha ao ler o QR.");
     } finally {
       setQrDecoding(false);
     }
+  }
+
+  function applyQrContent(raw: string) {
+    const sn = parseQrPayload(raw);
+    setForm((f) => {
+      const next = { ...f, qrPayload: raw, serialNumber: sn };
+      // Detecta plataforma pelo host/path do QR XMeye
+      try {
+        const u = new URL(raw.trim());
+        const hostPath = `${u.hostname}${u.pathname}`.toLowerCase();
+        if (hostPath.includes("csee") || hostPath.includes("icsee")) {
+          next.cloudPlatform = "ICSee";
+        } else if (hostPath.includes("xmeye") || hostPath.includes("xm")) {
+          next.cloudPlatform = "XMeye";
+        }
+      } catch {
+        /* ignore */
+      }
+      if (!f.name.trim() && sn) {
+        next.name = `Cam ${sn.slice(-6)}`;
+      }
+      return next;
+    });
+    setQrStatus(
+      sn && sn !== raw.trim()
+        ? `QR lido · série identificada: ${sn}`
+        : sn
+          ? `QR lido · série: ${sn}`
+          : "QR lido — informe o N.º de série manualmente",
+    );
   }
 
   async function startScan() {
@@ -719,15 +745,51 @@ export function AddCameraModal({ onClose, onAdd }: AddCameraModalProps) {
               )}
 
               <label className="block text-xs text-mist-dim">
-                Conteúdo do QR / N.º de série
+                Conteúdo do QR (cole ou carregue a imagem)
                 <textarea
                   value={form.qrPayload}
-                  onChange={(e) => set("qrPayload", e.target.value)}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    const sn = parseQrPayload(raw);
+                    setForm((f) => ({
+                      ...f,
+                      qrPayload: raw,
+                      serialNumber: sn,
+                    }));
+                    if (raw.trim() && sn) {
+                      setQrStatus(`Série identificada: ${sn}`);
+                    }
+                  }}
+                  onPaste={(e) => {
+                    const pasted = e.clipboardData.getData("text");
+                    if (pasted.trim()) {
+                      // Deixa o onChange preencher; reforça parse após paste
+                      requestAnimationFrame(() => applyQrContent(pasted));
+                    }
+                  }}
                   rows={3}
                   className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-xs text-mist outline-none focus:border-signal/40"
-                  placeholder="Ou cole o serial manualmente (ex.: f9b1765cf546a7b15nr0)"
+                  placeholder="Cole a URL do QR (ex.: https://d.xmeye.net/CSee?shareKey=…) ou o serial"
                 />
               </label>
+
+              <label className="block text-xs text-mist-dim">
+                N.º de série / Cloud ID (preenchido automaticamente)
+                <input
+                  value={form.serialNumber}
+                  onChange={(e) => set("serialNumber", e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-sm text-signal outline-none focus:border-signal/40"
+                  placeholder="Identificado a partir do QR…"
+                />
+              </label>
+              {form.serialNumber &&
+                form.qrPayload &&
+                form.serialNumber !== form.qrPayload.trim() && (
+                  <p className="text-[11px] text-signal">
+                    Extraído do QR:{" "}
+                    <span className="font-mono">{form.serialNumber}</span>
+                  </p>
+                )}
             </div>
           )}
 
