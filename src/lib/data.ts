@@ -7,7 +7,13 @@ export type CameraProtocol =
   | "Cloud P2P"
   | "XM / ICSee";
 export type CameraStatus = "online" | "offline" | "recording" | "alert";
-export type RegisterMode = "cloud" | "ip" | "onvif" | "rtsp" | "qr";
+export type RegisterMode =
+  | "cloud"
+  | "ip"
+  | "onvif"
+  | "rtsp"
+  | "qr"
+  | "discover";
 export type DetectionType =
   | "person"
   | "vehicle"
@@ -115,7 +121,12 @@ export const REGISTER_MODES: {
   {
     id: "qr",
     label: "QR Code",
-    hint: "Cole o serial do QR do dispositivo",
+    hint: "Carregue a imagem do QR ou cole o serial",
+  },
+  {
+    id: "discover",
+    label: "Rede",
+    hint: "Pesquise câmeras na LAN (ONVIF, XM, RTSP)",
   },
   {
     id: "ip",

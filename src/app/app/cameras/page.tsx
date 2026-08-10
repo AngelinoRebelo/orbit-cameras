@@ -78,8 +78,8 @@ export default function CamerasPage() {
             Câmeras
           </h1>
           <p className="mt-1 text-sm text-mist-dim">
-            {cameras.length} dispositivo{cameras.length === 1 ? "" : "s"} · Cloud,
-            IP, ONVIF, RTSP e QR
+            {cameras.length} dispositivo{cameras.length === 1 ? "" : "s"} · QR por
+            imagem, pesquisa na rede, Cloud, IP, ONVIF e RTSP
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
