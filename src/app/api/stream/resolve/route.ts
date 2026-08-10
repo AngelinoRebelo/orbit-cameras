@@ -121,7 +121,7 @@ export async function POST(req: Request) {
         ok: false,
         tryCloud: true,
         error: camera.devicePassword
-          ? "Sem ORBIT_CLOUD_GATEWAY — o P2P cloud (como no VMS Windows) precisa do bridge NetSDK→HLS para tocar no browser."
+          ? "Login cloud OK. O vídeo remoto no Chrome precisa de URL HLS (cole abaixo) ou IP na mesma Wi‑Fi — o P2P XMeye só roda nativo no VMS/ICSee."
           : "Informe a senha do dispositivo para conectar na nuvem (Serial + login + senha).",
         go2rtcConfigured: Boolean(go2rtcBase()),
         cloudGatewayConfigured: Boolean(cloudGatewayBase()),

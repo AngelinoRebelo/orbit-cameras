@@ -108,7 +108,7 @@ export function explainMissingStream(camera: Camera): string {
 
   if (cloud && camera.serialNumber && (camera.hasDevicePassword || camera.devicePassword)) {
     if (!camera.playbackUrl && !camera.ipAddress) {
-      return "Login cloud pronto (Serial + senha). Para vídeo remoto no browser (como VMS), o Railway precisa de ORBIT_CLOUD_GATEWAY (NetSDK→HLS). Sem bridge, use ICSee/XMeye no celular.";
+      return "Login cloud pronto. Cole uma URL HLS para ver no browser, informe o IP se estiver na mesma Wi‑Fi, ou abra o app ICSee/XMeye (P2P nativo).";
     }
   }
 

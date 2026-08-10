@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import {
   Battery,
   Cloud,
+  ExternalLink,
   Loader2,
   Mic,
   MicOff,
@@ -73,9 +74,11 @@ export function CameraFeed({
   const [streamError, setStreamError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [showLanAlt, setShowLanAlt] = useState(false);
+  const [cloudReady, setCloudReady] = useState(false);
   const [draftSerial, setDraftSerial] = useState(camera.serialNumber ?? "");
   const [draftUser, setDraftUser] = useState(camera.deviceLogin || "admin");
   const [draftPass, setDraftPass] = useState(camera.devicePassword ?? "");
+  const [draftHls, setDraftHls] = useState(camera.playbackUrl ?? "");
   const [draftIp, setDraftIp] = useState(camera.ipAddress ?? "");
   const [draftSaving, setDraftSaving] = useState(false);
 
@@ -96,6 +99,7 @@ export function CameraFeed({
     setDraftSerial(camera.serialNumber ?? "");
     setDraftUser(camera.deviceLogin || "admin");
     setDraftPass(camera.devicePassword ?? "");
+    setDraftHls(camera.playbackUrl ?? "");
     setDraftIp(camera.ipAddress ?? "");
     const tick = () => setClock(formatClock(new Date()));
     tick();
@@ -106,6 +110,7 @@ export function CameraFeed({
     camera.devicePassword,
     camera.serialNumber,
     camera.deviceLogin,
+    camera.playbackUrl,
   ]);
 
   const startLan = useCallback(
@@ -218,9 +223,9 @@ export function CameraFeed({
         });
         setPlaying(false);
         setStreamError(null);
-      } else {
-        setStreamError(data.message || explainMissingStream(next));
-        // re-resolve in case gateway/session already saved URL elsewhere
+      } else if (data.ok) {
+        setCloudReady(true);
+        setStreamError(null);
         const resolve = await fetch("/api/stream/resolve", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -229,17 +234,52 @@ export function CameraFeed({
         const resolved = (await resolve.json()) as {
           ok?: boolean;
           stream?: ActiveStream;
+          error?: string;
         };
         if (resolved.ok && resolved.stream) {
           setStream(resolved.stream);
-          setStreamError(null);
+          setCloudReady(false);
+        } else if (resolved.error) {
+          // dica amigável, não erro de login
+          setStreamError(resolved.error);
         }
+      } else {
+        setCloudReady(false);
+        setStreamError(data.message || "Falha no login cloud.");
       }
     } catch {
       setStreamError("Falha ao conectar na nuvem.");
     } finally {
       setDraftSaving(false);
     }
+  }
+
+  function saveHlsAndPlay(e: React.MouseEvent) {
+    e.stopPropagation();
+    const url = draftHls.trim();
+    if (!url) {
+      setStreamError("Cole uma URL HLS (.m3u8) ou MJPEG para tocar no browser.");
+      return;
+    }
+    const kind: PlaybackKind =
+      url.includes("m3u8") || url.includes("hls")
+        ? "hls"
+        : url.includes("mjpg") || url.includes("mjpeg")
+          ? "mjpeg"
+          : url.includes("whep") || url.includes("webrtc")
+            ? "webrtc"
+            : "video";
+    const patch: Partial<Camera> = {
+      playbackUrl: url,
+      playbackType: kind,
+      status: "online",
+      streamError: undefined,
+    };
+    onUpdateCamera?.(camera.id, patch);
+    setStream({ url, kind, label: kind.toUpperCase() });
+    setCloudReady(false);
+    setStreamError(null);
+    setPlaying(false);
   }
 
   function saveLanAndConnect(e: React.MouseEvent) {
@@ -345,70 +385,101 @@ export function CameraFeed({
         >
           <Cloud className="size-5 text-signal" />
           <p className="max-w-[300px] text-[11px] leading-relaxed text-mist-dim">
-            Conexão <span className="text-mist">cloud</span> (como no VMS
-            Windows): Serial NO + usuário + senha do dispositivo — sem precisar
-            da mesma Wi‑Fi.
+            {cloudReady ? (
+              <>
+                <span className="text-signal">Login cloud OK</span> — o Chrome
+                não toca P2P XMeye. Cole uma{" "}
+                <span className="text-mist">URL HLS</span> ou abra o app
+                oficial.
+              </>
+            ) : (
+              <>
+                Conexão <span className="text-mist">cloud</span> (como no VMS
+                Windows): Serial NO + usuário + senha — sem precisar da mesma
+                Wi‑Fi.
+              </>
+            )}
           </p>
           <div className="flex w-full max-w-[300px] flex-col gap-1.5">
+            {!cloudReady && (
+              <>
+                <input
+                  value={draftSerial}
+                  onChange={(e) => setDraftSerial(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Serial NO / Cloud ID"
+                  className="rounded-md border border-line bg-ink px-2 py-1.5 font-mono text-xs text-mist outline-none focus:border-signal/50"
+                  autoComplete="off"
+                />
+                <input
+                  value={draftUser}
+                  onChange={(e) => setDraftUser(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Usuário (admin)"
+                  className="rounded-md border border-line bg-ink px-2 py-1.5 text-xs text-mist outline-none focus:border-signal/50"
+                  autoComplete="username"
+                />
+                <input
+                  type="password"
+                  value={draftPass}
+                  onChange={(e) => setDraftPass(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Senha do dispositivo"
+                  className="rounded-md border border-line bg-ink px-2 py-1.5 text-xs text-mist outline-none focus:border-signal/50"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  disabled={draftSaving}
+                  onClick={(e) => void saveCloudAndConnect(e)}
+                  className="rounded-md bg-signal px-2 py-1.5 text-xs font-semibold text-ink"
+                >
+                  {draftSaving ? "Conectando…" : "Conectar na nuvem"}
+                </button>
+              </>
+            )}
             <input
-              value={draftSerial}
-              onChange={(e) => setDraftSerial(e.target.value)}
+              value={draftHls}
+              onChange={(e) => setDraftHls(e.target.value)}
               onClick={(e) => e.stopPropagation()}
-              placeholder="Serial NO / Cloud ID"
-              className="rounded-md border border-line bg-ink px-2 py-1.5 font-mono text-xs text-mist outline-none focus:border-signal/50"
+              placeholder="URL HLS opcional (…/live.m3u8)"
+              className="rounded-md border border-line bg-ink px-2 py-1.5 font-mono text-[11px] text-mist outline-none focus:border-signal/50"
               autoComplete="off"
-            />
-            <input
-              value={draftUser}
-              onChange={(e) => setDraftUser(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              placeholder="Usuário (admin)"
-              className="rounded-md border border-line bg-ink px-2 py-1.5 text-xs text-mist outline-none focus:border-signal/50"
-              autoComplete="username"
-            />
-            <input
-              type="password"
-              value={draftPass}
-              onChange={(e) => setDraftPass(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              placeholder="Senha do dispositivo"
-              className="rounded-md border border-line bg-ink px-2 py-1.5 text-xs text-mist outline-none focus:border-signal/50"
-              autoComplete="current-password"
             />
             <button
               type="button"
-              disabled={draftSaving}
-              onClick={(e) => void saveCloudAndConnect(e)}
-              className="rounded-md bg-signal px-2 py-1.5 text-xs font-semibold text-ink"
+              disabled={draftSaving || !draftHls.trim()}
+              onClick={saveHlsAndPlay}
+              className="rounded-md border border-signal/40 bg-signal/15 px-2 py-1.5 text-xs font-semibold text-signal disabled:opacity-40"
             >
-              {draftSaving ? "Conectando…" : "Conectar na nuvem"}
+              Tocar URL no Orbit
             </button>
           </div>
           {streamError && (
-            <p className="max-w-[300px] text-[10px] text-amber">{streamError}</p>
+            <p className="max-w-[300px] text-[10px] text-mist-dim">{streamError}</p>
           )}
           <div className="flex flex-wrap justify-center gap-2">
+            <a
+              href="https://v2.xmeye.net/#/login"
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-[11px] text-mist"
+            >
+              <ExternalLink className="size-3" />
+              Abrir XMeye Web
+            </a>
             <span
               role="button"
               tabIndex={0}
               onClick={(e) => {
                 e.stopPropagation();
                 setShowLanAlt(true);
+                setCloudReady(false);
               }}
               className="rounded-md border border-line px-2 py-1 text-[11px] text-mist"
             >
               Estou na mesma Wi‑Fi (IP)
-            </span>
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={(e) => {
-                e.stopPropagation();
-                void connect();
-              }}
-              className="rounded-md bg-white/10 px-2 py-1 text-[11px] text-mist"
-            >
-              Tentar de novo
             </span>
           </div>
         </div>

@@ -113,7 +113,7 @@ export async function POST(req: Request) {
       online: undefined,
       gatewayConfigured: false,
       message:
-        "Login cloud registrado (Serial + usuário + senha). O Chrome não fala P2P XMeye/ICSee como o VMS Windows — configure ORBIT_CLOUD_GATEWAY (bridge NetSDK→HLS) no Railway para o vídeo remoto, ou use go2rtc na LAN.",
+        "Dispositivo autenticado na nuvem (Serial + senha). Para ver o vídeo no Orbit, cole uma URL HLS ou use a mesma Wi‑Fi (IP). O P2P nativo fica no app ICSee/XMeye / VMS.",
     };
     return NextResponse.json(result);
   } catch (err) {

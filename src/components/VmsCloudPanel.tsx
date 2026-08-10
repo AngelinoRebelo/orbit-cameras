@@ -169,27 +169,27 @@ export function VmsCloudPanel({
       </div>
 
       <div className="mt-3 space-y-1.5 text-[11px] leading-relaxed">
-        <p className="text-mist-dim">
-          Gateway:{" "}
-          {gateway === null ? (
-            <span>…</span>
-          ) : gateway ? (
-            <span className="text-signal">ORBIT_CLOUD_GATEWAY ativo</span>
-          ) : (
-            <span className="text-amber">não configurado</span>
-          )}
-        </p>
         {msg && (
           <p className={ok ? "text-signal" : "text-amber"}>{msg}</p>
         )}
-        {!gateway && (
-          <p className="text-mist-dim">
-            Fora da LAN, o VMS Windows usa NetSDK/P2P. No Orbit, o mesmo login
-            alimenta o bridge{" "}
-            <span className="font-mono text-mist">ORBIT_CLOUD_GATEWAY</span>{" "}
-            (HLS). Sem bridge, use a app ICSee/XMeye no celular.
-          </p>
-        )}
+        <p className="text-mist-dim">
+          O Chrome não fala P2P XMeye (só o VMS/ICSee nativo). No Orbit: cole
+          URL HLS no preview, use a mesma Wi‑Fi (IP), ou{" "}
+          <a
+            href="https://v2.xmeye.net/#/login"
+            target="_blank"
+            rel="noreferrer"
+            className="text-signal underline-offset-2 hover:underline"
+          >
+            abra o XMeye Web
+          </a>
+          .
+        </p>
+        {gateway ? (
+          <p className="text-signal">Bridge cloud ativo</p>
+        ) : gateway === false ? (
+          <p className="text-mist-dim">Bridge opcional não configurado</p>
+        ) : null}
       </div>
     </div>
   );
