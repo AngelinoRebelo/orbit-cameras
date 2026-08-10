@@ -1,11 +1,6 @@
-Coloque aqui as libs do NetSDK (proprietárias — não vão para o Git):
+Ubuntu: copie NetSdk.dll + StreamReader.dll aqui, depois:
 
-Windows (igual ao VMS):
-  NetSdk.dll
-  StreamReader.dll
-  (opcional) H264Play.dll
+  ./scripts/bootstrap-ubuntu.sh
+  ./run-ubuntu.sh
 
-Linux:
-  libxmnetsdk.so   (pacote oficial Xiongmai / download.xm030.cn)
-
-Origem típica: kit NetSDK Xiongmai ou pasta netsdk do projeto IPCAS (somente DLLs Windows).
+(As DLLs são proprietárias e não vão para o Git.)

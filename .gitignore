@@ -47,3 +47,8 @@ bridge/data/hls/
 **/__pycache__/
 *.pyc
 
+# NetSDK bridge runtime (Wine Python, ffmpeg, DLLs)
+bridge/.runtime/
+bridge/vendor/*.dll
+bridge/vendor/*.so
+bridge/vendor/*.DLL

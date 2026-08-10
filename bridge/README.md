@@ -1,52 +1,52 @@
 # Orbit NetSDK Cloud Bridge (padrão VMS)
 
-Converte **Serial NO + usuário + senha** (Cloud P2P XMeye/ICSee) em **HLS** para o Orbit no browser — o mesmo papel do NetSDK no VMS Windows.
+Converte **Serial NO + usuário + senha** (Cloud P2P XMeye/ICSee) em **HLS** para o Orbit.
 
 ```
-Orbit (Railway)  --POST /connect-->  Bridge (seu PC)  --Login_Cloud-->  câmera
-                 <-- playbackUrl HLS --                 <-- RealPlay --
+Orbit (Railway)  --POST /connect-->  Bridge (Ubuntu)  --Login_Cloud-->  câmera
+                 <-- playbackUrl HLS --                  <-- RealPlay --
 ```
 
-## 1. Libs NetSDK
+## Ubuntu (recomendado neste projeto)
+
+O NetSDK oficial de cloud é DLL Windows. No Ubuntu usamos **Wine** + `NetSdk.dll` + ffmpeg.
+
+### 1. Libs
 
 Copie para `bridge/vendor/`:
 
-| SO | Arquivos |
-|----|----------|
-| Windows | `NetSdk.dll`, `StreamReader.dll` |
-| Linux | `libxmnetsdk.so` |
+- `NetSdk.dll`
+- `StreamReader.dll`
 
-Fonte: kit NetSDK Xiongmai (`download.xm030.cn`) ou pasta `netsdk` de projetos de exemplo. **Não versionamos as DLLs** (proprietárias).
+### 2. Bootstrap (uma vez)
 
-## 2. Rodar o bridge (Windows — recomendado)
+```bash
+# se ainda não tiver wine:
+sudo apt install wine wine64
 
-1. Instale [ffmpeg](https://ffmpeg.org/) e adicione ao PATH.
-2. Duplo clique / terminal:
-
-```bat
-run.bat
+cd bridge
+./scripts/bootstrap-ubuntu.sh   # baixa Python embed + ffmpeg estático
 ```
 
-3. Publique a porta (Tailscale Serve, ngrok, Cloudflare Tunnel…):
+### 3. Rodar
 
-```bat
-set ORBIT_BRIDGE_PUBLIC_URL=https://seu-tunel.exemplo
-run.bat
+```bash
+./run-ubuntu.sh
+# ou com túnel público para o Railway:
+ORBIT_BRIDGE_PUBLIC_URL=https://seu-tunel.exemplo ./run-ubuntu.sh
 ```
 
-Teste: `http://127.0.0.1:8787/health`
+Teste: http://127.0.0.1:8787/health
 
-## 3. Railway (Orbit)
-
-Variável de ambiente:
+### 4. Railway
 
 ```
 ORBIT_CLOUD_GATEWAY=https://seu-tunel.exemplo
 ```
 
-(sem barra no final). O Live → **Conectar na nuvem** passa a receber `playbackUrl` HLS.
+No Orbit: **Ao vivo → Conectar na nuvem**.
 
-## 4. API
+## API
 
 `POST /connect`
 
@@ -60,24 +60,10 @@ ORBIT_CLOUD_GATEWAY=https://seu-tunel.exemplo
 }
 ```
 
-Resposta:
+`stream`: `0` = main, `1` = sub (padrão).
 
-```json
-{
-  "ok": true,
-  "playbackUrl": "https://seu-tunel.exemplo/hls/.../index.m3u8",
-  "kind": "hls",
-  "label": "Cloud NetSDK HLS"
-}
-```
+Se o HLS falhar: `ORBIT_BRIDGE_REENCODE=1 ./run-ubuntu.sh`
 
-`stream`: `0` = main, `1` = sub (mais leve; padrão).
+## Windows nativo (opcional)
 
-Se o vídeo não abrir, tente `ORBIT_BRIDGE_REENCODE=1` (reencode H.264).
-
-## 5. Docker (Linux + .so)
-
-```bash
-export ORBIT_BRIDGE_PUBLIC_URL=https://seu-tunel.exemplo
-docker compose up --build
-```
+`run.bat` + ffmpeg no PATH (sem Wine).

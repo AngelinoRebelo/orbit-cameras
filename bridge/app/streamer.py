@@ -80,9 +80,20 @@ class StreamManager:
             playlist = out_dir / "index.m3u8"
             session.playlist = playlist
 
-            ffmpeg_bin = shutil.which("ffmpeg")
+            root = Path(__file__).resolve().parent.parent
+            candidates = [
+                os.environ.get("ORBIT_FFMPEG") or "",
+                shutil.which("ffmpeg") or "",
+                str(root / ".runtime" / "winpython" / "ffmpeg.exe"),
+                str(root / ".runtime" / "ffmpeg-bin" / "bin" / "ffmpeg"),
+                "ffmpeg.exe",
+                "ffmpeg",
+            ]
+            ffmpeg_bin = next((c for c in candidates if c and Path(c).is_file()), None)
             if not ffmpeg_bin:
-                raise NetSdkError("ffmpeg não encontrado no PATH do bridge")
+                raise NetSdkError(
+                    "ffmpeg não encontrado (use bootstrap-ubuntu.sh ou ORBIT_FFMPEG=...)"
+                )
 
             # Raw frames from NetSDK → remux/re-encode to HLS
             cmd = [

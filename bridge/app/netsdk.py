@@ -104,11 +104,13 @@ class NetSdk:
     def _load(self):
         system = platform.system()
         candidates: list[Path] = []
+        # Under Wine on Ubuntu, platform is Windows and NetSdk.dll works.
         if system == "Windows":
             candidates = [
                 self.vendor / "NetSdk.dll",
                 self.vendor / "NetSDK.dll",
                 Path("NetSdk.dll"),
+                Path(__file__).resolve().parent.parent / ".runtime" / "winpython" / "NetSdk.dll",
             ]
             loader = ctypes.WinDLL
         else:

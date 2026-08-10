@@ -80,7 +80,7 @@ export default function SettingsPage() {
         </p>
         <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-mist-dim">
           <li>Copie NetSdk.dll e StreamReader.dll para bridge/vendor/</li>
-          <li>No PC: execute bridge/run.bat (ou run.sh no Linux)</li>
+          <li>Ubuntu: ./scripts/bootstrap-ubuntu.sh && ./run-ubuntu.sh</li>
           <li>Publique com Tailscale/ngrok e defina no Railway:</li>
         </ol>
         <div className="mt-4 space-y-2 rounded-xl border border-line bg-ink/50 p-3 font-mono text-xs text-mist-dim">
