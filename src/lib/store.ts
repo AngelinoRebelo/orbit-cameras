@@ -46,11 +46,16 @@ export const useOrbitStore = create<OrbitState>()(
           shareCode: createShareCode(),
           shareExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString(),
         }),
-      addCamera: (cam) => set({ cameras: [cam, ...get().cameras] }),
+      addCamera: (cam) =>
+        set({
+          cameras: [cam, ...get().cameras],
+          selectedCameraId: cam.id,
+        }),
     }),
     {
-      name: "orbit-cameras",
+      name: "orbit-cameras-v2",
       partialize: (s) => ({
+        cameras: s.cameras,
         selectedCameraId: s.selectedCameraId,
         grid: s.grid,
         armed: s.armed,
@@ -59,6 +64,25 @@ export const useOrbitStore = create<OrbitState>()(
         muted: s.muted,
         nightMode: s.nightMode,
       }),
+      merge: (persisted, current) => {
+        const p = persisted as Partial<OrbitState> | undefined;
+        if (!p) return current;
+        const seedIds = new Set(CAMERAS.map((c) => c.id));
+        const saved = p.cameras ?? [];
+        const custom = saved.filter((c) => !seedIds.has(c.id));
+        // Mantém seeds atualizados + câmeras cadastradas pelo usuário
+        const cameras = [...custom, ...CAMERAS];
+        return {
+          ...current,
+          ...p,
+          cameras,
+          selectedCameraId:
+            p.selectedCameraId &&
+            cameras.some((c) => c.id === p.selectedCameraId)
+              ? p.selectedCameraId
+              : cameras[0]?.id ?? current.selectedCameraId,
+        };
+      },
     },
   ),
 );

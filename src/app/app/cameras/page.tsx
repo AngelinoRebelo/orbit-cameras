@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Info, Plus, Search } from "lucide-react";
+import { AddCameraModal } from "@/components/AddCameraModal";
+import { CameraAbout } from "@/components/CameraAbout";
 import { CameraFeed } from "@/components/CameraFeed";
-import { BRAND_PRESETS, SITES, type Camera } from "@/lib/data";
+import { SITES, type Camera } from "@/lib/data";
 import { useOrbitStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -15,59 +17,17 @@ export default function CamerasPage() {
   const [site, setSite] = useState<string>("all");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    brand: BRAND_PRESETS[0].brand as string,
-    protocol: "ONVIF" as Camera["protocol"],
-    rtsp: "",
-    site: "casa",
-  });
+  const [detail, setDetail] = useState<Camera | null>(null);
 
   const filtered = useMemo(() => {
     return cameras.filter((c) => {
       if (site !== "all" && c.site !== site) return false;
       if (!q.trim()) return true;
-      const hay = `${c.name} ${c.brand} ${c.model} ${c.location}`.toLowerCase();
+      const hay =
+        `${c.name} ${c.brand} ${c.model} ${c.location} ${c.serialNumber ?? ""} ${c.ipAddress ?? ""} ${c.registerMode ?? ""}`.toLowerCase();
       return hay.includes(q.toLowerCase());
     });
   }, [cameras, site, q]);
-
-  function submitCamera(e: React.FormEvent) {
-    e.preventDefault();
-    const preset = BRAND_PRESETS.find((b) => b.brand === form.brand);
-    const id = `cam-${Date.now()}`;
-    const cam: Camera = {
-      id,
-      name: form.name || `Nova câmera ${cameras.length + 1}`,
-      location: "Custom",
-      site: form.site,
-      status: "online",
-      protocol: form.protocol,
-      brand: form.brand,
-      model: preset?.models[0] ?? "Custom",
-      resolution: "1080p",
-      fps: 25,
-      codec: "H.265",
-      nightVision: true,
-      twoWayAudio: true,
-      ptz: form.protocol === "ONVIF",
-      wifiRssi: -50,
-      storageDays: 14,
-      thumbnailHue: Math.floor(Math.random() * 360),
-      scene: form.rtsp || "Stream configurado",
-      lastSeen: new Date().toISOString(),
-      streamLatencyMs: 320,
-    };
-    addCamera(cam);
-    setOpen(false);
-    setForm({
-      name: "",
-      brand: BRAND_PRESETS[0].brand,
-      protocol: "ONVIF",
-      rtsp: "",
-      site: "casa",
-    });
-  }
 
   return (
     <div className="space-y-6">
@@ -75,7 +35,7 @@ export default function CamerasPage() {
         <div>
           <h1 className="font-display text-3xl font-bold">Câmeras</h1>
           <p className="text-sm text-mist-dim">
-            Inventário multi-marca · ONVIF discovery · RTSP manual
+            Cadastro Cloud / QR / IP / ONVIF / RTSP · tipo XMeye & ICSee
           </p>
         </div>
         <button
@@ -94,7 +54,7 @@ export default function CamerasPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar nome, marca, modelo…"
+            placeholder="Buscar nome, serial, IP, marca…"
             className="w-full rounded-xl border border-line bg-ink-2/60 py-2.5 pl-10 pr-3 text-sm outline-none placeholder:text-mist-dim focus:border-signal/40"
           />
         </div>
@@ -166,128 +126,40 @@ export default function CamerasPage() {
                 <span className="rounded border border-line px-2 py-0.5">
                   {cam.protocol}
                 </span>
-                <span className="rounded border border-line px-2 py-0.5">
-                  {cam.codec}
-                </span>
-                <span className="rounded border border-line px-2 py-0.5">
-                  {cam.resolution}
-                </span>
-                {cam.ptz && (
-                  <span className="rounded border border-line px-2 py-0.5">
-                    PTZ
+                {cam.registerMode && (
+                  <span className="rounded border border-signal/30 px-2 py-0.5 text-signal">
+                    {cam.registerMode}
                   </span>
                 )}
-                {cam.nightVision && (
-                  <span className="rounded border border-line px-2 py-0.5">
-                    IR / ColorVu
+                {cam.serialNumber && (
+                  <span className="rounded border border-line px-2 py-0.5 font-mono">
+                    SN …{cam.serialNumber.slice(-4)}
+                  </span>
+                )}
+                {cam.ipAddress && (
+                  <span className="rounded border border-line px-2 py-0.5 font-mono">
+                    {cam.ipAddress}
                   </span>
                 )}
               </div>
+              <button
+                type="button"
+                onClick={() => setDetail(cam)}
+                className="inline-flex items-center gap-1.5 text-xs text-mist-dim transition hover:text-signal"
+              >
+                <Info className="size-3.5" />
+                Sobre o dispositivo
+              </button>
             </div>
           </div>
         ))}
       </div>
 
       {open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-4 backdrop-blur-sm">
-          <form
-            onSubmit={submitCamera}
-            className="w-full max-w-lg rounded-2xl border border-line bg-ink-2 p-6 shadow-2xl"
-          >
-            <h2 className="font-display text-xl font-semibold">
-              Adicionar câmera Wi‑Fi
-            </h2>
-            <p className="mt-1 text-sm text-mist-dim">
-              Preset de marca, URL RTSP ou descoberta ONVIF.
-            </p>
-
-            <div className="mt-5 space-y-3">
-              <label className="block text-xs text-mist-dim">
-                Nome
-                <input
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm text-mist outline-none focus:border-signal/40"
-                  placeholder="Ex.: Portaria lateral"
-                />
-              </label>
-              <label className="block text-xs text-mist-dim">
-                Marca
-                <select
-                  value={form.brand}
-                  onChange={(e) => setForm({ ...form, brand: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm text-mist outline-none"
-                >
-                  {BRAND_PRESETS.map((b) => (
-                    <option key={b.brand} value={b.brand}>
-                      {b.brand}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-xs text-mist-dim">
-                  Protocolo
-                  <select
-                    value={form.protocol}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        protocol: e.target.value as Camera["protocol"],
-                      })
-                    }
-                    className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm text-mist outline-none"
-                  >
-                    {["ONVIF", "RTSP", "RTMP", "WebRTC", "HLS"].map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block text-xs text-mist-dim">
-                  Site
-                  <select
-                    value={form.site}
-                    onChange={(e) => setForm({ ...form, site: e.target.value })}
-                    className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm text-mist outline-none"
-                  >
-                    {SITES.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <label className="block text-xs text-mist-dim">
-                URL RTSP / endpoint
-                <input
-                  value={form.rtsp}
-                  onChange={(e) => setForm({ ...form, rtsp: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-xs text-mist outline-none focus:border-signal/40"
-                  placeholder="rtsp://user:pass@192.168.0.20:554/stream1"
-                />
-              </label>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="rounded-lg px-4 py-2 text-sm text-mist-dim hover:text-mist"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="rounded-lg bg-signal px-4 py-2 text-sm font-semibold text-ink"
-              >
-                Conectar
-              </button>
-            </div>
-          </form>
-        </div>
+        <AddCameraModal onClose={() => setOpen(false)} onAdd={addCamera} />
+      )}
+      {detail && (
+        <CameraAbout camera={detail} onClose={() => setDetail(null)} />
       )}
     </div>
   );

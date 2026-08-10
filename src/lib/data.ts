@@ -1,5 +1,13 @@
-export type CameraProtocol = "ONVIF" | "RTSP" | "RTMP" | "WebRTC" | "HLS";
+export type CameraProtocol =
+  | "ONVIF"
+  | "RTSP"
+  | "RTMP"
+  | "WebRTC"
+  | "HLS"
+  | "Cloud P2P"
+  | "XM / ICSee";
 export type CameraStatus = "online" | "offline" | "recording" | "alert";
+export type RegisterMode = "cloud" | "ip" | "onvif" | "rtsp" | "qr";
 export type DetectionType =
   | "person"
   | "vehicle"
@@ -30,6 +38,29 @@ export interface Camera {
   scene: string;
   lastSeen: string;
   streamLatencyMs: number;
+  /** Como a câmera foi cadastrada */
+  registerMode?: RegisterMode;
+  /** N.º de série / Cloud ID (XMeye, ICSee, etc.) */
+  serialNumber?: string;
+  /** Product ID (PID) */
+  pid?: string;
+  /** Login do dispositivo */
+  deviceLogin?: string;
+  /** Senha não é persistida em claro — só flag */
+  hasDevicePassword?: boolean;
+  /** Versão do dispositivo / hardware */
+  deviceVersion?: string;
+  /** Firmware */
+  softwareVersion?: string;
+  /** Data publicação firmware */
+  firmwarePublishedAt?: string;
+  /** Fuso horário do dispositivo */
+  timezone?: string;
+  /** Acesso por IP local */
+  ipAddress?: string;
+  ipPort?: number;
+  rtspUrl?: string;
+  cloudPlatform?: "XMeye" | "ICSee" | "XMCloud" | "P2P" | "Outro";
 }
 
 export interface EventItem {
@@ -58,6 +89,7 @@ export const SITES = [
 ] as const;
 
 export const BRAND_PRESETS = [
+  { brand: "XM / XMeye / ICSee", models: ["X6E-WEQ", "X5C", "Bullet Wi‑Fi"] },
   { brand: "Reolink", models: ["Argus 4 Pro", "TrackMix WiFi", "E1 Outdoor"] },
   { brand: "TP-Link Tapo", models: ["C425", "C320WS", "C210"] },
   { brand: "Eufy", models: ["SoloCam S340", "Cam 3C", "Floodlight E340"] },
@@ -70,7 +102,71 @@ export const BRAND_PRESETS = [
   { brand: "Genérica ONVIF", models: ["Profile S", "Profile T"] },
 ] as const;
 
+export const REGISTER_MODES: {
+  id: RegisterMode;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    id: "cloud",
+    label: "Cloud / P2P",
+    hint: "N.º de série + senha (XMeye, ICSee, XM)",
+  },
+  {
+    id: "qr",
+    label: "QR Code",
+    hint: "Cole o serial do QR do dispositivo",
+  },
+  {
+    id: "ip",
+    label: "IP / LAN",
+    hint: "IP, porta, usuário e senha locais",
+  },
+  {
+    id: "onvif",
+    label: "ONVIF",
+    hint: "Descoberta e Profile S/T",
+  },
+  {
+    id: "rtsp",
+    label: "RTSP",
+    hint: "URL rtsp:// completa",
+  },
+];
+
 export const CAMERAS: Camera[] = [
+  {
+    id: "cam-casa-rua",
+    name: "Casa Rua",
+    location: "Fachada",
+    site: "casa",
+    status: "recording",
+    protocol: "XM / ICSee",
+    brand: "XM / XMeye / ICSee",
+    model: "X6E-WEQ",
+    resolution: "1080p",
+    fps: 15,
+    codec: "H.264",
+    nightVision: true,
+    twoWayAudio: true,
+    ptz: false,
+    wifiRssi: -46,
+    storageDays: 7,
+    thumbnailHue: 175,
+    scene: "Câmera cloud P2P — fachada da rua",
+    lastSeen: new Date().toISOString(),
+    streamLatencyMs: 620,
+    registerMode: "cloud",
+    serialNumber: "f9b1765cf546a7b15nr0",
+    pid: "A90A007F3000000C",
+    deviceLogin: "camara",
+    hasDevicePassword: true,
+    deviceVersion: "X6E-WEQ",
+    softwareVersion: "V5.04.R02.000A07F3.10 010.346532.0000010",
+    firmwarePublishedAt: "2025-02-28 14:18:14",
+    timezone: "Oeste3.0",
+    cloudPlatform: "XMeye",
+  },
   {
     id: "cam-entrada",
     name: "Entrada Principal",
@@ -93,6 +189,10 @@ export const CAMERAS: Camera[] = [
     scene: "Portão e calçada sob luz natural",
     lastSeen: new Date().toISOString(),
     streamLatencyMs: 280,
+    registerMode: "rtsp",
+    rtspUrl: "rtsp://admin:***@192.168.0.21:554/h264Preview_01_main",
+    ipAddress: "192.168.0.21",
+    ipPort: 554,
   },
   {
     id: "cam-sala",
@@ -115,6 +215,11 @@ export const CAMERAS: Camera[] = [
     scene: "Ambiente interno com sofá e janela",
     lastSeen: new Date().toISOString(),
     streamLatencyMs: 420,
+    registerMode: "ip",
+    ipAddress: "192.168.0.34",
+    ipPort: 2020,
+    deviceLogin: "admin",
+    hasDevicePassword: true,
   },
   {
     id: "cam-quintal",
@@ -138,6 +243,9 @@ export const CAMERAS: Camera[] = [
     scene: "Jardim e muro dos fundos",
     lastSeen: new Date().toISOString(),
     streamLatencyMs: 510,
+    registerMode: "onvif",
+    ipAddress: "192.168.0.55",
+    ipPort: 80,
   },
   {
     id: "cam-garagem",
@@ -160,6 +268,7 @@ export const CAMERAS: Camera[] = [
     scene: "Vaga coberta e portão lateral",
     lastSeen: new Date().toISOString(),
     streamLatencyMs: 360,
+    registerMode: "rtsp",
   },
   {
     id: "cam-escritorio",
@@ -182,6 +291,7 @@ export const CAMERAS: Camera[] = [
     scene: "Recepção corporativa",
     lastSeen: new Date().toISOString(),
     streamLatencyMs: 190,
+    registerMode: "onvif",
   },
   {
     id: "cam-estoque",
@@ -204,6 +314,11 @@ export const CAMERAS: Camera[] = [
     scene: "Prateleiras e iluminação LED",
     lastSeen: new Date().toISOString(),
     streamLatencyMs: 340,
+    registerMode: "ip",
+    ipAddress: "10.0.1.40",
+    ipPort: 80,
+    deviceLogin: "admin",
+    hasDevicePassword: true,
   },
   {
     id: "cam-galpao-1",
@@ -226,6 +341,7 @@ export const CAMERAS: Camera[] = [
     scene: "Doca de carga e caminhões",
     lastSeen: new Date().toISOString(),
     streamLatencyMs: 450,
+    registerMode: "rtsp",
   },
   {
     id: "cam-galpao-2",
@@ -248,6 +364,39 @@ export const CAMERAS: Camera[] = [
     scene: "Pátio industrial (offline)",
     lastSeen: new Date(Date.now() - 1000 * 60 * 42).toISOString(),
     streamLatencyMs: 0,
+    registerMode: "onvif",
+  },
+  {
+    id: "cam-portao-cloud",
+    name: "Portão Cloud",
+    location: "Entrada lateral",
+    site: "casa",
+    status: "online",
+    protocol: "Cloud P2P",
+    brand: "XM / XMeye / ICSee",
+    model: "X5C",
+    resolution: "1080p",
+    fps: 15,
+    codec: "H.264",
+    nightVision: true,
+    twoWayAudio: true,
+    ptz: true,
+    wifiRssi: -53,
+    storageDays: 7,
+    thumbnailHue: 25,
+    scene: "Câmera P2P via cloud ID",
+    lastSeen: new Date().toISOString(),
+    streamLatencyMs: 780,
+    registerMode: "qr",
+    serialNumber: "a1c29e84bd0012ff7kq3",
+    pid: "B12C008E4100001A",
+    deviceLogin: "admin",
+    hasDevicePassword: true,
+    deviceVersion: "X5C",
+    softwareVersion: "V5.04.R02.000A07F3.10",
+    firmwarePublishedAt: "2024-11-12 09:40:00",
+    timezone: "Oeste3.0",
+    cloudPlatform: "ICSee",
   },
 ];
 
@@ -263,6 +412,15 @@ export const EVENTS: EventItem[] = [
   },
   {
     id: "ev-2",
+    cameraId: "cam-casa-rua",
+    type: "person",
+    label: "Movimento na fachada Casa Rua",
+    confidence: 0.93,
+    at: new Date(Date.now() - 1000 * 60 * 8).toISOString(),
+    clipDurationSec: 22,
+  },
+  {
+    id: "ev-3",
     cameraId: "cam-entrada",
     type: "package",
     label: "Pacote deixado na porta",
@@ -271,7 +429,7 @@ export const EVENTS: EventItem[] = [
     clipDurationSec: 24,
   },
   {
-    id: "ev-3",
+    id: "ev-4",
     cameraId: "cam-galpao-1",
     type: "vehicle",
     label: "Veículo na doca 01",
@@ -280,7 +438,7 @@ export const EVENTS: EventItem[] = [
     clipDurationSec: 42,
   },
   {
-    id: "ev-4",
+    id: "ev-5",
     cameraId: "cam-sala",
     type: "pet",
     label: "Animal de estimação em movimento",
@@ -289,7 +447,7 @@ export const EVENTS: EventItem[] = [
     clipDurationSec: 12,
   },
   {
-    id: "ev-5",
+    id: "ev-6",
     cameraId: "cam-garagem",
     type: "sound",
     label: "Som alto — possível alarme",
@@ -298,7 +456,7 @@ export const EVENTS: EventItem[] = [
     clipDurationSec: 8,
   },
   {
-    id: "ev-6",
+    id: "ev-7",
     cameraId: "cam-estoque",
     type: "motion",
     label: "Movimento após horário comercial",
@@ -311,6 +469,14 @@ export const EVENTS: EventItem[] = [
 export const RECORDINGS: RecordingClip[] = [
   {
     id: "rec-1",
+    cameraId: "cam-casa-rua",
+    startedAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+    durationSec: 720,
+    sizeMb: 210,
+    trigger: "continuous",
+  },
+  {
+    id: "rec-2",
     cameraId: "cam-entrada",
     startedAt: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
     durationSec: 900,
@@ -318,7 +484,7 @@ export const RECORDINGS: RecordingClip[] = [
     trigger: "continuous",
   },
   {
-    id: "rec-2",
+    id: "rec-3",
     cameraId: "cam-quintal",
     startedAt: new Date(Date.now() - 1000 * 60 * 4).toISOString(),
     durationSec: 48,
@@ -326,7 +492,7 @@ export const RECORDINGS: RecordingClip[] = [
     trigger: "ai",
   },
   {
-    id: "rec-3",
+    id: "rec-4",
     cameraId: "cam-galpao-1",
     startedAt: new Date(Date.now() - 1000 * 60 * 40).toISOString(),
     durationSec: 180,
@@ -334,7 +500,7 @@ export const RECORDINGS: RecordingClip[] = [
     trigger: "motion",
   },
   {
-    id: "rec-4",
+    id: "rec-5",
     cameraId: "cam-escritorio",
     startedAt: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
     durationSec: 3600,
@@ -344,6 +510,11 @@ export const RECORDINGS: RecordingClip[] = [
 ];
 
 export const PROTOCOLS = [
+  {
+    name: "Cloud P2P / XM",
+    latency: "variável",
+    use: "Serial + senha (XMeye, ICSee) sem IP público",
+  },
   {
     name: "WebRTC",
     latency: "<500 ms",
@@ -365,14 +536,9 @@ export const PROTOCOLS = [
     use: "Escala para muitos espectadores",
   },
   {
-    name: "RTMP",
-    latency: "1–3 s",
-    use: "Push de encoders e cams legadas",
-  },
-  {
-    name: "SRT",
-    latency: "<1 s",
-    use: "Links instáveis e WAN remota",
+    name: "IP / LAN",
+    latency: "local",
+    use: "IP + porta (34567 XM, 554 RTSP, 80 HTTP)",
   },
 ] as const;
 
@@ -387,4 +553,39 @@ export function createShareCode() {
     code += alphabet[Math.floor(Math.random() * alphabet.length)];
   }
   return code;
+}
+
+export function maskSecret(value: string, visible = 4) {
+  if (value.length <= visible * 2) return "••••••••";
+  return `${value.slice(0, visible)}${"*".repeat(4)}${value.slice(-visible)}`;
+}
+
+export function parseQrPayload(raw: string) {
+  const text = raw.trim();
+  // Formatos comuns: serial puro, sn=..., ou URL com id
+  const snMatch = text.match(/(?:sn|serial|id)[=:]?\s*([a-z0-9]{12,24})/i);
+  if (snMatch) return snMatch[1];
+  const bare = text.match(/^([a-z0-9]{12,24})$/i);
+  if (bare) return bare[1];
+  try {
+    const url = new URL(text);
+    return (
+      url.searchParams.get("sn") ||
+      url.searchParams.get("id") ||
+      url.pathname.split("/").filter(Boolean).pop() ||
+      text
+    );
+  } catch {
+    return text;
+  }
+}
+
+export function deviceQrValue(camera: Camera) {
+  if (camera.serialNumber) {
+    return `orbit://device?sn=${camera.serialNumber}&pid=${camera.pid ?? ""}&name=${encodeURIComponent(camera.name)}`;
+  }
+  if (camera.ipAddress) {
+    return `orbit://device?ip=${camera.ipAddress}&port=${camera.ipPort ?? 80}&name=${encodeURIComponent(camera.name)}`;
+  }
+  return `orbit://device?id=${camera.id}`;
 }
