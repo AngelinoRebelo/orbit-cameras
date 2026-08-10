@@ -67,6 +67,16 @@ export interface Camera {
   ipPort?: number;
   rtspUrl?: string;
   cloudPlatform?: "XMeye" | "ICSee" | "XMCloud" | "P2P" | "Outro";
+  /** Senha do dispositivo (local) — necessária p/ DVRIP/RTSP */
+  devicePassword?: string;
+  /** URL pronta para o browser (HLS / MJPEG / MP4 / WHEP) */
+  playbackUrl?: string;
+  /** Tipo de reprodução no player */
+  playbackType?: "hls" | "mjpeg" | "webrtc" | "video" | "auto";
+  /** Fonte bruta para gateway (dvrip:// ou rtsp://) */
+  streamSource?: string;
+  /** Estado da última tentativa de stream */
+  streamError?: string;
 }
 
 export interface EventItem {

@@ -1,25 +1,43 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Copy, Eye, EyeOff, Trash2, X } from "lucide-react";
+import { Copy, Eye, EyeOff, Radio, Trash2, X } from "lucide-react";
 import {
   deviceQrValue,
   maskSecret,
   type Camera,
 } from "@/lib/data";
+import { detectPlaybackKind } from "@/lib/streaming";
 import { formatClock } from "@/lib/utils";
 
 interface CameraAboutProps {
   camera: Camera;
   onClose: () => void;
   onDelete?: () => void;
+  onSave?: (patch: Partial<Camera>) => void;
 }
 
-export function CameraAbout({ camera, onClose, onDelete }: CameraAboutProps) {
+export function CameraAbout({
+  camera,
+  onClose,
+  onDelete,
+  onSave,
+}: CameraAboutProps) {
   const [showLogin, setShowLogin] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [ipAddress, setIpAddress] = useState(camera.ipAddress ?? "");
+  const [ipPort, setIpPort] = useState(String(camera.ipPort ?? 34567));
+  const [devicePassword, setDevicePassword] = useState(
+    camera.devicePassword ?? "",
+  );
+  const [playbackUrl, setPlaybackUrl] = useState(camera.playbackUrl ?? "");
+  const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState("");
   const qrValue = useMemo(() => deviceQrValue(camera), [camera]);
+
+  useEffect(() => setMounted(true), []);
 
   async function copySerial() {
     if (!camera.serialNumber) return;
@@ -30,6 +48,30 @@ export function CameraAbout({ camera, onClose, onDelete }: CameraAboutProps) {
     } catch {
       setCopied(false);
     }
+  }
+
+  function saveStream() {
+    if (!onSave) return;
+    setSaving(true);
+    const port = Number(ipPort) || 34567;
+    const patch: Partial<Camera> = {
+      ipAddress: ipAddress.trim() || undefined,
+      ipPort: port,
+      devicePassword: devicePassword || camera.devicePassword,
+      hasDevicePassword: Boolean(devicePassword || camera.devicePassword),
+      playbackUrl: playbackUrl.trim() || undefined,
+      playbackType: playbackUrl.trim()
+        ? detectPlaybackKind(playbackUrl.trim())
+        : undefined,
+      streamError: undefined,
+      protocol:
+        camera.protocol === "Cloud P2P" && ipAddress.trim()
+          ? "XM / ICSee"
+          : camera.protocol,
+    };
+    onSave(patch);
+    setNote("Stream atualizado — o player vai reconectar.");
+    setSaving(false);
   }
 
   const rows: { label: string; value: React.ReactNode; hide?: boolean }[] = [
@@ -57,9 +99,7 @@ export function CameraAbout({ camera, onClose, onDelete }: CameraAboutProps) {
       label: "Nome de login do dispositivo",
       value: camera.deviceLogin ? (
         <span className="inline-flex items-center gap-2">
-          {showLogin
-            ? camera.deviceLogin
-            : maskSecret(camera.deviceLogin, 2)}
+          {showLogin ? camera.deviceLogin : maskSecret(camera.deviceLogin, 2)}
           <button
             type="button"
             onClick={() => setShowLogin((v) => !v)}
@@ -79,7 +119,7 @@ export function CameraAbout({ camera, onClose, onDelete }: CameraAboutProps) {
     },
     {
       label: "Senha do dispositivo",
-      value: camera.hasDevicePassword ? "••••••••" : "não definida",
+      value: camera.hasDevicePassword || camera.devicePassword ? "••••••••" : "não definida",
     },
     {
       label: "Versão do dispositivo",
@@ -111,7 +151,11 @@ export function CameraAbout({ camera, onClose, onDelete }: CameraAboutProps) {
     },
     {
       label: "Hora do dispositivo",
-      value: formatClock(new Date()),
+      value: (
+        <span suppressHydrationWarning>
+          {mounted ? formatClock(new Date()) : "--:--:--"}
+        </span>
+      ),
     },
     {
       label: "Modo de cadastro",
@@ -121,23 +165,6 @@ export function CameraAbout({ camera, onClose, onDelete }: CameraAboutProps) {
       label: "Plataforma cloud",
       value: camera.cloudPlatform || "—",
       hide: !camera.cloudPlatform,
-    },
-    {
-      label: "IP / porta",
-      value:
-        camera.ipAddress != null
-          ? `${camera.ipAddress}:${camera.ipPort ?? "—"}`
-          : "—",
-      hide: !camera.ipAddress,
-    },
-    {
-      label: "RTSP",
-      value: camera.rtspUrl ? (
-        <span className="break-all font-mono text-[11px]">{camera.rtspUrl}</span>
-      ) : (
-        "—"
-      ),
-      hide: !camera.rtspUrl,
     },
   ];
 
@@ -190,6 +217,72 @@ export function CameraAbout({ camera, onClose, onDelete }: CameraAboutProps) {
               </li>
             ))}
         </ul>
+
+        <div className="border-t border-line p-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-medium text-mist">
+            <Radio className="size-4 text-signal" />
+            Stream no browser
+          </div>
+          <p className="mb-3 text-[11px] leading-relaxed text-mist-dim">
+            XMeye/ICSee (Cloud P2P / DVRIP :34567) não toca direto no Chrome.
+            Informe o <strong className="text-mist">IP na LAN</strong> + senha
+            (gateway go2rtc) ou cole uma{" "}
+            <strong className="text-mist">URL HLS/MJPEG/WebRTC</strong>.
+          </p>
+          <div className="space-y-2">
+            <label className="block text-xs text-mist-dim">
+              IP da câmera (LAN)
+              <input
+                value={ipAddress}
+                onChange={(e) => setIpAddress(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-sm text-mist outline-none focus:border-signal/40"
+                placeholder="192.168.0.20"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs text-mist-dim">
+                Porta DVRIP
+                <input
+                  value={ipPort}
+                  onChange={(e) => setIpPort(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-sm text-mist outline-none focus:border-signal/40"
+                  placeholder="34567"
+                />
+              </label>
+              <label className="block text-xs text-mist-dim">
+                Senha (stream)
+                <input
+                  type="password"
+                  value={devicePassword}
+                  onChange={(e) => setDevicePassword(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm text-mist outline-none focus:border-signal/40"
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                />
+              </label>
+            </div>
+            <label className="block text-xs text-mist-dim">
+              URL HLS / MJPEG / WHEP (opcional)
+              <input
+                value={playbackUrl}
+                onChange={(e) => setPlaybackUrl(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-[11px] text-mist outline-none focus:border-signal/40"
+                placeholder="https://go2rtc/api/stream.m3u8?src=casa_rua"
+              />
+            </label>
+            {onSave && (
+              <button
+                type="button"
+                onClick={saveStream}
+                disabled={saving}
+                className="mt-1 inline-flex w-full items-center justify-center rounded-xl bg-signal py-2.5 text-sm font-semibold text-ink"
+              >
+                Salvar e reconectar vídeo
+              </button>
+            )}
+            {note && <p className="text-[11px] text-signal">{note}</p>}
+          </div>
+        </div>
 
         {onDelete && (
           <div className="border-t border-line p-4">

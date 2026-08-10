@@ -24,6 +24,7 @@ interface OrbitState {
   toggleNight: () => void;
   refreshShare: () => void;
   addCamera: (cam: Camera) => void;
+  updateCamera: (id: string, patch: Partial<Camera>) => void;
   removeCamera: (id: string) => void;
   removeCameras: (ids: string[]) => void;
 }
@@ -64,6 +65,12 @@ export const useOrbitStore = create<OrbitState>()(
           removedCameraIds: get().removedCameraIds.filter((id) => id !== cam.id),
           selectedCameraId: cam.id,
         }),
+      updateCamera: (id, patch) =>
+        set({
+          cameras: get().cameras.map((c) =>
+            c.id === id ? { ...c, ...patch, id: c.id } : c,
+          ),
+        }),
       removeCamera: (id) => {
         const cameras = get().cameras.filter((c) => c.id !== id);
         const removedCameraIds = Array.from(
@@ -94,7 +101,7 @@ export const useOrbitStore = create<OrbitState>()(
       },
     }),
     {
-      name: "orbit-cameras-v3",
+      name: "orbit-cameras-v4",
       partialize: (s) => ({
         cameras: s.cameras,
         removedCameraIds: s.removedCameraIds,

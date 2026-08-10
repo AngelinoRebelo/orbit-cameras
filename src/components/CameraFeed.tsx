@@ -1,17 +1,23 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Battery,
+  Loader2,
   Mic,
   MicOff,
   Moon,
   Signal,
   Sun,
   Video,
+  VideoOff,
   Wifi,
 } from "lucide-react";
 import type { Camera } from "@/lib/data";
+import { explainMissingStream } from "@/lib/streaming";
+import type { PlaybackKind } from "@/lib/streaming";
+import { StreamPlayer } from "@/components/StreamPlayer";
 import { cn, formatClock, wifiBars } from "@/lib/utils";
 
 interface CameraFeedProps {
@@ -23,6 +29,13 @@ interface CameraFeedProps {
   showHud?: boolean;
   className?: string;
   onClick?: () => void;
+  onConfigureStream?: () => void;
+}
+
+interface ActiveStream {
+  url: string;
+  kind: PlaybackKind;
+  label: string;
 }
 
 export function CameraFeed({
@@ -34,9 +47,65 @@ export function CameraFeed({
   showHud = true,
   className,
   onClick,
+  onConfigureStream,
 }: CameraFeedProps) {
   const offline = camera.status === "offline";
   const bars = wifiBars(camera.wifiRssi);
+  const [mounted, setMounted] = useState(false);
+  const [clock, setClock] = useState("--:--:--");
+  const [connecting, setConnecting] = useState(false);
+  const [stream, setStream] = useState<ActiveStream | null>(null);
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const tick = () => setClock(formatClock(new Date()));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const connect = useCallback(async () => {
+    if (offline) return;
+    setConnecting(true);
+    setStreamError(null);
+    setPlaying(false);
+    try {
+      const res = await fetch("/api/stream/resolve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ camera }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        stream?: ActiveStream & { via?: string };
+        error?: string;
+      };
+      if (data.ok && data.stream) {
+        setStream({
+          url: data.stream.url,
+          kind: data.stream.kind,
+          label: data.stream.label,
+        });
+      } else {
+        setStream(null);
+        setStreamError(data.error || explainMissingStream(camera));
+      }
+    } catch {
+      setStream(null);
+      setStreamError("Falha de rede ao resolver o stream");
+    } finally {
+      setConnecting(false);
+    }
+  }, [camera, offline]);
+
+  useEffect(() => {
+    setStream(null);
+    setPlaying(false);
+    setStreamError(null);
+    void connect();
+  }, [connect]);
 
   return (
     <button
@@ -64,9 +133,77 @@ export function CameraFeed({
         }}
       />
 
-      {!offline && <div className="absolute inset-0 scanline opacity-70" />}
+      {stream && !offline && (
+        <StreamPlayer
+          url={stream.url}
+          kind={stream.kind}
+          muted={muted}
+          nightMode={nightMode}
+          onPlaying={() => setPlaying(true)}
+          onError={(msg) => {
+            setPlaying(false);
+            setStreamError(msg);
+          }}
+        />
+      )}
 
-      <div className="absolute inset-0 opacity-[0.12] mix-blend-overlay">
+      {!stream && !offline && !connecting && (
+        <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-2 bg-black/55 px-4 text-center">
+          <VideoOff className="size-6 text-mist-dim" />
+          <p className="max-w-xs text-[11px] leading-relaxed text-mist-dim">
+            {streamError || explainMissingStream(camera)}
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                void connect();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.stopPropagation();
+                  void connect();
+                }
+              }}
+              className="rounded-md bg-signal/20 px-2.5 py-1 text-[11px] font-medium text-signal"
+            >
+              Tentar de novo
+            </span>
+            {onConfigureStream && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConfigureStream();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.stopPropagation();
+                    onConfigureStream();
+                  }
+                }}
+                className="rounded-md border border-line px-2.5 py-1 text-[11px] text-mist"
+              >
+                Configurar stream
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {connecting && (
+        <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-2 bg-black/50 text-xs text-mist">
+          <Loader2 className="size-5 animate-spin text-signal" />
+          Resolvendo DVRIP / RTSP / HLS…
+        </div>
+      )}
+
+      {!offline && !stream && <div className="absolute inset-0 scanline opacity-40" />}
+
+      <div className="pointer-events-none absolute inset-0 opacity-[0.08] mix-blend-overlay">
         <div className="h-full w-full lens-grid" />
       </div>
 
@@ -80,25 +217,35 @@ export function CameraFeed({
 
       {showHud && (
         <>
-          <div className="absolute left-3 top-3 flex items-center gap-2">
+          <div className="pointer-events-none absolute left-3 top-3 z-[2] flex items-center gap-2">
             {!offline ? (
               <span className="inline-flex items-center gap-1.5 rounded bg-black/45 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-mist backdrop-blur-sm">
-                <span className="live-dot size-1.5 rounded-full bg-danger" />
-                Live
+                <span
+                  className={cn(
+                    "live-dot size-1.5 rounded-full",
+                    playing ? "bg-danger" : "bg-amber",
+                  )}
+                />
+                {playing ? "Live" : stream ? "Buffer" : "Standby"}
               </span>
             ) : (
               <span className="rounded bg-black/55 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-mist-dim backdrop-blur-sm">
                 Offline
               </span>
             )}
-            {camera.status === "recording" && (
+            {camera.status === "recording" && playing && (
               <span className="inline-flex items-center gap-1 rounded bg-danger/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-danger backdrop-blur-sm">
                 <Video className="size-3" /> REC
               </span>
             )}
+            {stream && (
+              <span className="rounded bg-black/45 px-2 py-1 text-[10px] uppercase tracking-wider text-signal backdrop-blur-sm">
+                {stream.label}
+              </span>
+            )}
           </div>
 
-          <div className="absolute right-3 top-3 flex items-center gap-2 text-mist/80">
+          <div className="pointer-events-none absolute right-3 top-3 z-[2] flex items-center gap-2 text-mist/80">
             {nightMode ? (
               <Moon className="size-3.5" />
             ) : (
@@ -111,7 +258,7 @@ export function CameraFeed({
             )}
           </div>
 
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent p-3 pt-10">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] bg-gradient-to-t from-black/75 via-black/35 to-transparent p-3 pt-10">
             <div className="flex items-end justify-between gap-3">
               <div className="min-w-0">
                 <p
@@ -128,7 +275,7 @@ export function CameraFeed({
               </div>
               {!compact && (
                 <div className="shrink-0 text-right font-mono text-[10px] text-mist-dim">
-                  <div>{formatClock(new Date())}</div>
+                  <div suppressHydrationWarning>{mounted ? clock : "--:--:--"}</div>
                   <div className="mt-0.5 flex items-center justify-end gap-2">
                     <span className="inline-flex items-center gap-1">
                       <Wifi className="size-3" />
@@ -140,7 +287,7 @@ export function CameraFeed({
                         {camera.battery}%
                       </span>
                     )}
-                    {!offline && (
+                    {!offline && playing && (
                       <span className="inline-flex items-center gap-1 text-signal">
                         <Signal className="size-3" />
                         {camera.streamLatencyMs}ms
@@ -155,9 +302,12 @@ export function CameraFeed({
       )}
 
       {offline && (
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 z-[2] flex items-center justify-center">
           <p className="rounded bg-black/50 px-3 py-2 text-xs text-mist-dim backdrop-blur-sm">
-            Sem sinal · última vez {formatClock(camera.lastSeen)}
+            Sem sinal · última vez{" "}
+            <span suppressHydrationWarning>
+              {mounted ? formatClock(camera.lastSeen) : "--:--:--"}
+            </span>
           </p>
         </div>
       )}

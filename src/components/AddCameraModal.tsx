@@ -219,6 +219,7 @@ export function AddCameraModal({ onClose, onAdd }: AddCameraModalProps) {
       ipPort: device.port,
       deviceLogin: form.deviceLogin || "admin",
       hasDevicePassword: Boolean(form.devicePassword),
+      devicePassword: form.devicePassword || undefined,
       serialNumber: device.serialHint,
       deviceVersion: device.model,
       rtspUrl:
@@ -260,6 +261,7 @@ export function AddCameraModal({ onClose, onAdd }: AddCameraModalProps) {
       streamLatencyMs: 480,
       registerMode: mode === "discover" ? "ip" : mode,
       hasDevicePassword: Boolean(form.devicePassword),
+      devicePassword: form.devicePassword || undefined,
       deviceLogin: form.deviceLogin || undefined,
     };
 
@@ -306,6 +308,9 @@ export function AddCameraModal({ onClose, onAdd }: AddCameraModalProps) {
           .replace("T", " "),
         timezone: "Oeste3.0",
         scene: `Cloud ${form.cloudPlatform} · SN ${form.serialNumber.trim()}`,
+        ipAddress: form.ipAddress.trim() || undefined,
+        ipPort: Number(form.ipPort) || 34567,
+        devicePassword: form.devicePassword || undefined,
       };
     }
 
@@ -331,6 +336,9 @@ export function AddCameraModal({ onClose, onAdd }: AddCameraModalProps) {
         softwareVersion: "V5.04.R02.000A07F3.10",
         timezone: "Oeste3.0",
         scene: `QR → Cloud ID ${sn}`,
+        ipAddress: form.ipAddress.trim() || undefined,
+        ipPort: Number(form.ipPort) || 34567,
+        devicePassword: form.devicePassword || undefined,
       };
     }
 
@@ -637,6 +645,24 @@ export function AddCameraModal({ onClose, onAdd }: AddCameraModalProps) {
                   onChange={(e) => set("deviceVersion", e.target.value)}
                   className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 text-sm text-mist outline-none focus:border-signal/40"
                   placeholder="X6E-WEQ"
+                />
+              </label>
+              <label className="block text-xs text-mist-dim">
+                IP LAN (p/ vídeo DVRIP)
+                <input
+                  value={form.ipAddress}
+                  onChange={(e) => set("ipAddress", e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-sm text-mist outline-none focus:border-signal/40"
+                  placeholder="192.168.0.20 (opcional, recomendado)"
+                />
+              </label>
+              <label className="block text-xs text-mist-dim">
+                Porta
+                <input
+                  value={form.ipPort}
+                  onChange={(e) => set("ipPort", e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-sm text-mist outline-none focus:border-signal/40"
+                  placeholder="34567"
                 />
               </label>
             </>

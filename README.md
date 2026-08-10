@@ -31,10 +31,21 @@ Abra [http://localhost:3000](http://localhost:3000).
 Variáveis futuras para gateway real:
 
 ```
+ORBIT_GO2RTC_URL=https://seu-go2rtc
 ORBIT_WEBRTC_GATEWAY=
 ORBIT_ONVIF_DISCOVERY=true
 ORBIT_STORAGE_BUCKET=
 ```
+
+### Vídeo ao vivo (XMeye / ICSee / RTSP)
+
+O browser **não** reproduz Cloud P2P nem RTSP direto. Fluxo suportado:
+
+1. Informe o **IP LAN** + senha do dispositivo em **Detalhes → Stream**
+2. Rode [go2rtc](https://github.com/AlexxIT/go2rtc) na rede das câmeras com fonte `dvrip://user:pass@IP:34567`
+3. Defina `ORBIT_GO2RTC_URL` no Railway **ou** cole a URL HLS (`…/api/stream.m3u8?src=…`) no dispositivo
+
+O player Orbit toca **HLS**, **MJPEG** e **WebRTC/WHEP**.
 
 ## Rotas
 

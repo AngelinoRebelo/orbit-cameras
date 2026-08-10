@@ -21,6 +21,7 @@ import { cn, statusLabel } from "@/lib/utils";
 export default function CamerasPage() {
   const cameras = useOrbitStore((s) => s.cameras);
   const addCamera = useOrbitStore((s) => s.addCamera);
+  const updateCamera = useOrbitStore((s) => s.updateCamera);
   const removeCamera = useOrbitStore((s) => s.removeCamera);
   const removeCameras = useOrbitStore((s) => s.removeCameras);
   const nightMode = useOrbitStore((s) => s.nightMode);
@@ -200,16 +201,17 @@ export default function CamerasPage() {
               >
                 <div className="relative">
                   <CameraFeed
-                    camera={cam}
-                    nightMode={nightMode}
-                    muted={muted}
-                    className="aspect-video w-full"
-                    onClick={
-                      selectMode
-                        ? () => toggleSelect(cam.id)
-                        : () => setDetail(cam)
-                    }
-                  />
+              camera={cam}
+              nightMode={nightMode}
+              muted={muted}
+              className="aspect-video w-full"
+              onClick={
+                selectMode
+                  ? () => toggleSelect(cam.id)
+                  : () => setDetail(cam)
+              }
+              onConfigureStream={() => setDetail(cam)}
+            />
                   {selectMode && (
                     <button
                       type="button"
@@ -307,6 +309,10 @@ export default function CamerasPage() {
           onClose={() => setDetail(null)}
           onDelete={() => {
             setPendingDelete({ type: "one", camera: detail });
+          }}
+          onSave={(patch) => {
+            updateCamera(detail.id, patch);
+            setDetail({ ...detail, ...patch });
           }}
         />
       )}
